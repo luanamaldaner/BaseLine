@@ -58,6 +58,11 @@ export default function TracePlot({ trace, height = 260 }) {
         }
         ctx.stroke();
       };
+      // Keep wild readings inside the plot area instead of drawing over the axes.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(pad.l, pad.t - 2, w - pad.l - pad.r, h - pad.t - pad.b + 4);
+      ctx.clip();
       line('target', color('--target'), 2);
       line('gaze', color('--accent'), 1.5);
 
@@ -65,10 +70,11 @@ export default function TracePlot({ trace, height = 260 }) {
       for (const p of trace) {
         if (p.saccade && Number.isFinite(p.gaze)) {
           ctx.beginPath();
-          ctx.arc(x(p.t), y(p.gaze), 3, 0, 2 * Math.PI);
+          ctx.arc(x(p.t), y(Math.min(Math.max(p.gaze, 0), 1)), 4, 0, 2 * Math.PI);
           ctx.fill();
         }
       }
+      ctx.restore();
     };
     draw();
     const ro = new ResizeObserver(draw);
@@ -82,7 +88,7 @@ export default function TracePlot({ trace, height = 260 }) {
       <div className="legend">
         <span><i style={{ background: 'var(--target)' }} /> Dot</span>
         <span><i style={{ background: 'var(--accent)' }} /> Eyes</span>
-        <span><i style={{ background: 'var(--danger)' }} /> Catch-up saccade</span>
+        <span><i style={{ background: 'var(--danger)' }} /> Catch-up jump</span>
       </div>
     </div>
   );

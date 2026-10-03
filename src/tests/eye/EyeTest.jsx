@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { createLandmarker, openCamera, startTracking, EYES } from './faceTracker.js';
 import {
-  PURSUIT, CALIBRATION, METRICS, targetX, fitCalibration, computePursuit,
+  PURSUIT, CALIBRATION, METRICS, targetX, fitCalibration, frameIssue, computePursuit,
 } from './pursuit.js';
 import { addTrial, compare, summarizeBaseline } from '../../lib/baseline.js';
 import TracePlot from './TracePlot.jsx';
-import ResultsTable from '../../components/ResultsTable.jsx';
+import ResultCards from '../../components/ResultCards.jsx';
 
 const TEST = 'eye';
+const BASELINE_TRIALS = 3;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default function EyeTest({ athlete }) {
@@ -24,7 +25,8 @@ export default function EyeTest({ athlete }) {
   const [stageText, setStageText] = useState('');
   const [live, setLive] = useState(null);
   const [result, setResult] = useState(null);
-  const [saved, setSaved] = useState(null);
+  const [savedKind, setSavedKind] = useState(null);
+  const [, bump] = useState(0); // re-render after saving a trial
 
   const setPhase = (p) => {
     phaseRef.current = p;
@@ -40,15 +42,17 @@ export default function EyeTest({ athlete }) {
 
     (async () => {
       try {
-        stream = await openCamera();
-        if (cancelled) return;
+        const s = await openCamera();
+        if (cancelled) return s.getTracks().forEach((t) => t.stop());
+        stream = s;
         const video = videoRef.current;
         video.srcObject = stream;
         await video.play();
-        landmarker = await createLandmarker();
-        if (cancelled) return;
+        const lm = await createLandmarker();
+        if (cancelled) return lm.close();
+        landmarker = lm;
 
-        let frames = 0, fpsStart = performance.now(), fps = 0, lastUi = 0;
+        let frames = 0, fpsStart = performance.now(), fps = 0, lastUi = 0, smoothH = NaN;
         stop = startTracking(video, landmarker, (s) => {
           sinkRef.current?.(s);
           frames++;
@@ -57,10 +61,15 @@ export default function EyeTest({ athlete }) {
             frames = 0;
             fpsStart = s.t;
           }
-          if (phaseRef.current === 'preview') drawOverlay(overlayRef.current, video, s);
-          if (s.t - lastUi > 120) {
+          if (Number.isFinite(s.h)) {
+            smoothH = Number.isFinite(smoothH) ? smoothH + 0.4 * (s.h - smoothH) : s.h;
+          }
+          if (phaseRef.current === 'preview' || phaseRef.current === 'results') {
+            drawOverlay(overlayRef.current, video, s);
+          }
+          if (s.t - lastUi > 100) {
             lastUi = s.t;
-            setLive({ face: s.face, h: s.h, v: s.v, blink: s.blink, fps });
+            setLive({ face: s.face, h: smoothH, yaw: s.yaw, blink: s.blink, fps });
           }
         });
         setStatus('ready');
@@ -100,7 +109,7 @@ export default function EyeTest({ athlete }) {
   async function runTest() {
     abortRef.current = false;
     setResult(null);
-    setSaved(null);
+    setSavedKind(null);
     try {
       await document.documentElement.requestFullscreen?.();
     } catch {
@@ -115,14 +124,14 @@ export default function EyeTest({ athlete }) {
       const calibPoints = [];
       for (const x of CALIBRATION.points) {
         moveDot(x);
-        const hs = [];
+        const samples = [];
         const start = performance.now();
         sinkRef.current = (s) => {
-          if (s.t - start >= CALIBRATION.settleMs && s.face && !s.blink) hs.push(s.h);
+          if (s.t - start >= CALIBRATION.settleMs && s.face && !s.blink) samples.push(s);
         };
         await sleep(CALIBRATION.dwellMs);
         checkAbort();
-        calibPoints.push({ x, hs });
+        calibPoints.push({ x, samples });
       }
       sinkRef.current = null;
       const calib = fitCalibration(calibPoints);
@@ -138,7 +147,7 @@ export default function EyeTest({ athlete }) {
 
       const samples = [];
       const t0 = performance.now();
-      sinkRef.current = (s) => samples.push({ t: s.t - t0, h: s.h, valid: s.face && !s.blink });
+      sinkRef.current = (s) => samples.push({ t: s.t - t0, h: s.h, issue: frameIssue(s, calib) });
       await new Promise((resolve) => {
         const frame = () => {
           const t = performance.now() - t0;
@@ -152,7 +161,11 @@ export default function EyeTest({ athlete }) {
       checkAbort();
 
       const r = computePursuit(samples, calib);
-      setResult({ ...r, calib });
+      // Compare against the baseline as it stands, before this trial is saved.
+      const comparison = r.ok && summarizeBaseline(athlete, TEST)
+        ? compare(athlete, TEST, r.metrics, METRICS)
+        : null;
+      setResult({ ...r, calib, comparison });
       setPhase('results');
     } catch (e) {
       sinkRef.current = null;
@@ -168,14 +181,14 @@ export default function EyeTest({ athlete }) {
   }
 
   function save(kind) {
-    if (!athlete || !result?.ok) return;
-    // Compare against the baseline as it was before this trial is added.
-    const comparison = kind === 'check' ? compare(athlete, TEST, result.metrics, METRICS) : null;
+    if (!result?.ok) return;
     addTrial(athlete, TEST, kind, result.metrics);
-    setSaved({ kind, comparison });
+    setSavedKind(kind);
+    bump((n) => n + 1);
   }
 
-  const base = athlete ? summarizeBaseline(athlete, TEST) : null;
+  const base = summarizeBaseline(athlete, TEST);
+  const baseN = base?.n ?? 0;
   const testing = phase === 'calibrate' || phase === 'pursuit';
   const quality = result?.ok ? qualityWarnings(result) : [];
 
@@ -207,7 +220,7 @@ export default function EyeTest({ athlete }) {
         </div>
 
         <div className="panel">
-          <h3>Live signal</h3>
+          <h3>Setup check</h3>
           <LiveSignal live={live} />
           <ul className="tips">
             <li>Sit ~50 cm (arm's length) from the screen, face well lit.</li>
@@ -216,20 +229,14 @@ export default function EyeTest({ athlete }) {
             <li>Press Esc to stop a test.</li>
           </ul>
           <div className="row">
-            <button
-              className="primary"
-              disabled={status !== 'ready' || !athlete}
-              onClick={runTest}
-            >
+            <button className="primary" disabled={status !== 'ready'} onClick={runTest}>
               {phase === 'results' ? 'Run again' : 'Start test'}
             </button>
-            {!athlete && <span className="muted">Enter an athlete name first.</span>}
           </div>
-          {athlete && (
-            <p className="muted small">
-              {base ? `${base.n} baseline trial(s) on file for ${athlete}.` : `No baseline yet for ${athlete}.`}
-            </p>
-          )}
+          <p className="muted small">
+            Baseline: {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS} trials recorded
+            {baseN >= BASELINE_TRIALS ? ' ✓' : ''}
+          </p>
         </div>
       </div>
 
@@ -243,27 +250,46 @@ export default function EyeTest({ athlete }) {
       {phase === 'results' && result && (
         <div className="results">
           {!result.ok ? (
-            <div className="callout danger">Test failed: {result.reason}</div>
+            <div className="callout danger">
+              Test didn't work: {result.reason} Check the setup panel and run it again.
+            </div>
           ) : (
             <>
               {quality.length > 0 && (
                 <div className="callout warn">
+                  <b>Retest recommended.</b>
                   {quality.map((q) => <div key={q}>{q}</div>)}
                 </div>
               )}
-              <TracePlot trace={result.trace} />
-              <ResultsTable metrics={result.metrics} spec={METRICS} comparison={saved?.comparison} />
-              <p className="muted small">
-                Calibration fit R² {result.calib.r2.toFixed(2)} · usable frames{' '}
-                {(result.validFraction * 100).toFixed(0)}% · {result.saccades} saccades
-              </p>
-              {saved ? (
+
+              {!result.comparison && (
+                <div className="callout">
+                  <b>No baseline yet for {athlete}.</b> Save this as a baseline trial. Record{' '}
+                  {BASELINE_TRIALS} while healthy; later tests are compared to them.
+                </div>
+              )}
+
+              <ResultCards metrics={result.metrics} spec={METRICS} comparison={result.comparison} />
+
+              <div className="plot-wrap">
+                <h3>Eyes vs. dot</h3>
+                <p className="muted small">
+                  Gray is where the dot was; blue is where your eyes were. The closer the two
+                  lines, the better the tracking. Red dots mark catch-up jumps. Gaps are blinks or
+                  moments the tracker lost your eyes.
+                </p>
+                <TracePlot trace={result.trace} />
+              </div>
+
+              {savedKind ? (
                 <p className="saved">
-                  Saved as {saved.kind === 'baseline' ? 'a baseline trial' : 'a post-hit check'}.
+                  Saved as {savedKind === 'baseline' ? 'a baseline trial' : 'a post-hit check'}.
                 </p>
               ) : (
                 <div className="row">
-                  <button onClick={() => save('baseline')}>Save as baseline trial</button>
+                  <button className="primary" onClick={() => save('baseline')}>
+                    Save as baseline trial
+                  </button>
                   <button onClick={() => save('check')} disabled={!base}>
                     Save as post-hit check
                   </button>
@@ -272,6 +298,10 @@ export default function EyeTest({ athlete }) {
                   </button>
                 </div>
               )}
+              <p className="muted small">
+                Calibration fit {(result.calib.r2 * 100).toFixed(0)}% · usable frames{' '}
+                {(result.validFraction * 100).toFixed(0)}%
+              </p>
             </>
           )}
         </div>
@@ -282,36 +312,38 @@ export default function EyeTest({ athlete }) {
 
 function qualityWarnings(r) {
   const out = [];
-  if (r.calib.r2 < 0.85) out.push(`Weak calibration (R² ${r.calib.r2.toFixed(2)}). Retest with better light and a still head.`);
-  if (r.validFraction < 0.85) out.push(`Face/eyes lost in ${((1 - r.validFraction) * 100).toFixed(0)}% of frames. Retest.`);
+  const total = r.trace.filter((p) => p.t >= PURSUIT.skipMs).length || 1;
+  const pct = (n) => Math.round((100 * n) / total);
+  if (r.calib.r2 < 0.85) out.push('Calibration was shaky. Keep your head still and look right at each dot.');
+  if (pct(r.issues.head) > 10) out.push(`Head turned during ${pct(r.issues.head)}% of the test. Move only your eyes.`);
+  if (pct(r.issues.face) > 10) out.push(`Face lost during ${pct(r.issues.face)}% of the test. Improve the lighting or move closer.`);
+  if (pct(r.issues.blink) > 15) out.push(`Eyes closed during ${pct(r.issues.blink)}% of the test.`);
+  if (pct(r.issues.glitch) > 15) out.push(`Tracker glitched during ${pct(r.issues.glitch)}% of the test. Try better light or removing glasses.`);
   return out;
 }
 
 function LiveSignal({ live }) {
-  if (!live) return <p className="muted">Waiting for frames…</p>;
+  if (!live) return <p className="muted">Waiting for camera…</p>;
   const pct = Number.isFinite(live.h) ? Math.min(Math.max(live.h, 0), 1) * 100 : null;
+  const facing = Number.isFinite(live.yaw) && Math.abs(live.yaw) < 0.08;
+  const rows = [
+    ['Face', live.face ? 'found' : 'not found', live.face],
+    ['Head', !live.face ? '—' : facing ? 'facing screen' : 'turn to face screen', live.face && facing],
+    ['Eyes', !live.face ? '—' : live.blink ? 'closed' : 'open', live.face && !live.blink],
+    ['Camera', live.fps ? `${live.fps.toFixed(0)} fps` : '…', live.fps >= 20],
+  ];
   return (
     <div className="live">
-      <div className="live-row">
-        <span>Face</span>
-        <b className={live.face ? 'ok' : 'bad'}>{live.face ? 'detected' : 'not found'}</b>
-      </div>
-      <div className="live-row">
-        <span>Eyes</span>
-        <b className={live.blink ? 'bad' : 'ok'}>{live.face ? (live.blink ? 'closed' : 'open') : '—'}</b>
-      </div>
-      <div className="live-row">
-        <span>Frame rate</span>
-        <b>{live.fps ? `${live.fps.toFixed(0)} fps` : '…'}</b>
-      </div>
-      <div className="live-row">
-        <span>Iris position</span>
-        <b>{Number.isFinite(live.h) ? live.h.toFixed(3) : '—'}</b>
-      </div>
+      {rows.map(([label, text, ok]) => (
+        <div className="live-row" key={label}>
+          <span>{label}</span>
+          <b className={ok ? 'ok' : 'bad'}>{text}</b>
+        </div>
+      ))}
       <div className="meter">
         {pct !== null && <div className="meter-dot" style={{ left: `${pct}%` }} />}
       </div>
-      <p className="muted small">Look left and right: the dot should move smoothly.</p>
+      <p className="muted small">Look left and right: the dot should follow smoothly.</p>
     </div>
   );
 }

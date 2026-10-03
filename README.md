@@ -61,7 +61,7 @@ The face model ships in `public/models/`, so the app works offline.
 ## Code layout
 ```
 src/lib/baseline.js          per-athlete trials, baseline mean/SD, z-score comparison
-src/components/ResultsTable  shared metric table + Normal / Monitor / Refer status
+src/components/ResultCards   plain-language result cards + Normal / Monitor / Refer banner
 src/tests/eye/               eye pursuit (working)
   faceTracker.js             webcam -> MediaPipe -> iris position within each eye
   pursuit.js                 dot motion, calibration fit, gain / lag / saccade metrics
@@ -73,11 +73,11 @@ src/tests/symptoms/          TODO
 
 ## Adding a test
 1. Build the UI in `src/tests/<name>/`. Produce one flat object of numbers per trial, e.g. `{ medianMs: 284, iqrMs: 41 }`.
-2. Export a spec saying which direction is worse:
+2. Export a spec saying which direction is worse, plus a plain-English `explain` and optional `rate(value)` guide:
    `{ medianMs: { label: 'Median RT', unit: 'ms', worse: 'higher', digits: 0 } }`
    (`worse` is `'higher'`, `'lower'`, or `'away'` for any change from baseline).
 3. Save with `addTrial(athlete, '<name>', 'baseline' | 'check', metrics)`.
-4. For a check, call `compare(athlete, '<name>', metrics, spec)` **before** saving it, and render `<ResultsTable metrics spec comparison />`.
+4. For a check, call `compare(athlete, '<name>', metrics, spec)` **before** saving it, and render `<ResultCards metrics spec comparison />`.
 
 See `src/tests/eye/EyeTest.jsx` for the full pattern.
 

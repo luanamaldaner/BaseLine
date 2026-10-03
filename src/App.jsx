@@ -15,8 +15,10 @@ const TABS = [
 export default function App() {
   const [tab, setTab] = useState('eye');
   const [athlete, setAthlete] = useState('');
+
+  if (!athlete) return <NameGate onContinue={setAthlete} />;
+
   const { Component } = TABS.find((t) => t.id === tab);
-  const name = athlete.trim();
 
   return (
     <div className="app">
@@ -24,18 +26,12 @@ export default function App() {
         <div className="brand">
           <span className="logo" aria-hidden>◎</span> Baseline
         </div>
-        <label className="athlete">
-          Athlete
-          <input
-            list="athletes"
-            value={athlete}
-            onChange={(e) => setAthlete(e.target.value)}
-            placeholder="Name"
-          />
-          <datalist id="athletes">
-            {listAthletes().map((a) => <option key={a} value={a} />)}
-          </datalist>
-        </label>
+        <div className="athlete">
+          Testing <b>{athlete}</b>
+          <button className="ghost small-btn" onClick={() => setAthlete('')}>
+            Switch athlete
+          </button>
+        </div>
       </header>
 
       <nav className="tabs">
@@ -51,13 +47,62 @@ export default function App() {
       </nav>
 
       <main>
-        <Component athlete={name} />
+        {/* key: remount per athlete so no state leaks between people */}
+        <Component key={athlete} athlete={athlete} />
       </main>
 
       <footer className="muted small">
         Screening tool, not a diagnosis. Any athlete with a suspected concussion should be
         removed from play and evaluated by a clinician.
       </footer>
+    </div>
+  );
+}
+
+function NameGate({ onContinue }) {
+  const [name, setName] = useState('');
+  const known = listAthletes();
+  const trimmed = name.trim();
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (trimmed) onContinue(trimmed);
+  };
+
+  return (
+    <div className="gate">
+      <form className="gate-card" onSubmit={submit}>
+        <div className="brand gate-brand">
+          <span className="logo" aria-hidden>◎</span> Baseline
+        </div>
+        <h1>Who's being tested?</h1>
+        <p className="muted">
+          Enter the athlete's name. Results are saved under it and compared to their own
+          baseline.
+        </p>
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Athlete name"
+          aria-label="Athlete name"
+        />
+        <button className="primary" type="submit" disabled={!trimmed}>
+          Continue
+        </button>
+        {known.length > 0 && (
+          <div className="gate-known">
+            <p className="muted small">Or pick a returning athlete:</p>
+            <div className="chips">
+              {known.map((a) => (
+                <button type="button" key={a} onClick={() => onContinue(a)}>
+                  {a}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </form>
     </div>
   );
 }
