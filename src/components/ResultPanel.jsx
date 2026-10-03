@@ -5,6 +5,7 @@ import { ACTIONS } from '../../shared/assess.js';
 import ResultCards from './ResultCards.jsx';
 import { useConditions } from '../lib/conditions.js';
 import { baselineConcerns } from '../lib/validity.js';
+import DotEmoji from './DotEmoji.jsx';
 
 // "Baseline: 2 of 3 trials recorded" (only for people allowed to see it).
 export function BaselineProgress({ subjectUid, test }) {
@@ -12,7 +13,7 @@ export function BaselineProgress({ subjectUid, test }) {
   return (
     <p className="muted small">
       Baseline: {Math.min(n, BASELINE_TRIALS)} of {BASELINE_TRIALS} trials recorded
-      {n >= BASELINE_TRIALS ? ' ✓' : ''}
+      {n >= BASELINE_TRIALS && <> <DotEmoji mood="happy" size={19} label="complete" /></>}
     </p>
   );
 }

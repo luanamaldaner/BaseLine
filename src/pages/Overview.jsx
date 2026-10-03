@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { TESTS, RESULT_TESTS } from '../tests/registry.js';
 import { getTrials, summarizeBaseline, usualRange, BASELINE_TRIALS } from '../lib/baseline.js';
 import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } from '../lib/status.js';
@@ -7,6 +7,7 @@ import Trend from '../components/Trend.jsx';
 import { TestBadge, TEST_THEME } from '../components/Icons.jsx';
 import Avatar from '../components/Avatar.jsx';
 import { getSession } from '../lib/session.js';
+import DotEmoji from '../components/DotEmoji.jsx';
 
 // Display name for anyone this viewer can see.
 function nameOf(uid) {
@@ -38,7 +39,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
 
   return (
     <section className="overview">
-      <div className="player-card">
+      <div className="player-card" data-tour="dash-header">
         <Avatar name={name || '?'} />
         <div className="player-main">
           <p className="eyebrow">{isSelf ? 'My dashboard' : 'Player dashboard'}</p>
@@ -58,7 +59,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
 
       <OverallBanner overall={overall} rows={all} baselineDone={baselineDone} isSelf={isSelf} />
 
-      <div className="test-grid">
+      <div className="test-grid" data-tour="test-grid">
         {rows.map(({ test, trials, baseN, check }) => {
           const def = test.metrics[test.headline];
           const status = check && STATUS[check.comparison.status];
@@ -77,7 +78,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
                 <span className="muted small">{check ? `Latest ${def.label.toLowerCase()}` : 'Latest check'}</span>
                 <span className="stat-row">
                   <span className="stat-big">
-                    {check ? formatMetric(check.trial.metrics[test.headline], def) : '—'}
+                    {check ? formatMetric(check.trial.metrics[test.headline], def) : 'None yet'}
                     {check && <small> {def.unit}</small>}
                   </span>
                   {status && <span className={`chip ${status.cls}`}>{status.short}</span>}
@@ -93,7 +94,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
                   ))}
                 </span>
                 <span className="small">
-                  {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS}{needsBaseline ? '' : ' ✓'}
+                  {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS}{!needsBaseline && <> <DotEmoji mood="happy" size={19} label="complete" /></>}
                 </span>
               </div>
 
@@ -177,7 +178,27 @@ export function Guide() {
     { id: 'call', label: 'How the call works' },
   ];
   const [active, setActive] = useState(tabs[0].id);
+  const [dir, setDir] = useState(1); // 1 = moved right, -1 = moved left (which way content slides)
+  const [pill, setPill] = useState(null); // where the sliding highlight sits
   const refs = useRef({});
+
+  const select = (id) => {
+    const from = tabs.findIndex((t) => t.id === active);
+    const to = tabs.findIndex((t) => t.id === id);
+    if (to !== from) setDir(to > from ? 1 : -1);
+    setActive(id);
+  };
+
+  // Slide the highlight under the active tab (and keep it there on resize).
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = refs.current[active];
+      if (el) setPill({ left: el.offsetLeft, width: el.offsetWidth, top: el.offsetTop, height: el.offsetHeight });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [active]);
 
   // Arrow keys move between tabs (the standard tabs keyboard pattern).
   const onKey = (e) => {
@@ -186,7 +207,7 @@ export function Guide() {
     if (to === undefined) return;
     e.preventDefault();
     const next = tabs[(to + tabs.length) % tabs.length].id;
-    setActive(next);
+    select(next);
     refs.current[next]?.focus();
   };
 
@@ -196,7 +217,8 @@ export function Guide() {
     <section className="guide">
       <h2>Learn more</h2>
       <p className="muted guide-intro">What each test measures, how to get a clean result, and how the overall call is made.</p>
-      <div className="info-tabs" role="tablist" aria-label="About the tests" onKeyDown={onKey}>
+      <div className="info-tabs" data-tour="learn-tabs" role="tablist" aria-label="About the tests" onKeyDown={onKey}>
+        {pill && <span className="info-pill" aria-hidden="true" style={pill} />}
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -207,7 +229,7 @@ export function Guide() {
             aria-controls={`guide-panel-${t.id}`}
             tabIndex={active === t.id ? 0 : -1}
             className={active === t.id ? 'active' : ''}
-            onClick={() => setActive(t.id)}
+            onClick={() => select(t.id)}
           >
             {t.test && <TestBadge id={t.id} size={26} />}
             {t.label}
@@ -216,7 +238,10 @@ export function Guide() {
       </div>
 
       <div className="info-panel" role="tabpanel" id={`guide-panel-${tab.id}`} aria-labelledby={`guide-tab-${tab.id}`}>
-        {tab.test ? <TestInfo test={tab.test} /> : tab.id === 'together' ? <Together /> : <HowTheCallWorks />}
+        {/* key: each tab's content slides in from the side it came from */}
+        <div key={tab.id} className={`info-slide ${dir > 0 ? 'from-right' : 'from-left'}`}>
+          {tab.test ? <TestInfo test={tab.test} /> : tab.id === 'together' ? <Together /> : <HowTheCallWorks />}
+        </div>
       </div>
     </section>
   );

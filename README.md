@@ -4,7 +4,7 @@ A browser-based sideline concussion screen that compares each athlete to their o
 
 **[Live demo](https://baselinetest.web.app)** · **[Short demo run (?quick)](https://baselinetest.web.app/?quick)**
 
-Built for **Dream Team Engineering Designathon 2026 — Software track**: a technology-based solution addressing a health-related challenge in sports, physical activity, or athletic participation.
+Built for **Dream Team Engineering Designathon 2026, Software track**: a technology-based solution addressing a health-related challenge in sports, physical activity, or athletic participation.
 
 ## The problem
 

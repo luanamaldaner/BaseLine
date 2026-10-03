@@ -11,7 +11,9 @@ import { say, hush, beep, unlockAudio } from '../lib/cues.js';
 import ResultCards from '../components/ResultCards.jsx';
 import { ActionCard } from '../components/ResultPanel.jsx';
 import { useConditions } from '../lib/conditions.js';
+import { TestDemo } from '../components/Mascot.jsx';
 import { baselineConcerns } from '../lib/validity.js';
+import DotEmoji from '../components/DotEmoji.jsx';
 
 // The three objective tests, one after the other, for an athlete who may be
 // young or concussed: one instruction per screen, every instruction spoken,
@@ -68,7 +70,7 @@ const STEPS = [
   },
 ];
 
-// ?quick — a demo-length run for a 3-minute pitch slot. The modules export
+// ?quick: a demo-length run for a 3-minute pitch slot. The modules export
 // their settings as plain objects, so a short run is a matter of overriding
 // them once before anything starts.
 if (new URLSearchParams(window.location.search).has('quick')) {
@@ -210,15 +212,16 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
 
       {stage === 'ready' && (
         <div className="flow-ready">
+          <TestDemo test={step.id} />
           <ol className="flow-instr">
             {step.athlete.map((line) => <li key={line}>{line}</li>)}
           </ol>
           {!step.autoSpeak && (
             <button className="ghost speak-btn" onClick={readInstructions}>
-              🔊 {readAloud ? 'Read it again' : 'Read this to me'}
+              <DotEmoji mood="talk" size={24} /> {readAloud ? 'Read it again' : 'Read this to me'}
             </button>
           )}
-          {step.soundNote && <div className="callout flow-sound">🔈 <b>Sound on.</b> {step.soundNote}</div>}
+          {step.soundNote && <div className="callout flow-sound"><DotEmoji mood="sound" size={24} /> <b>Sound on.</b> {step.soundNote}</div>}
           <p className="flow-examiner"><b>Examiner:</b> {step.examiner}</p>
           <div className="row">
             <button className="primary big-btn" onClick={start}>Start</button>

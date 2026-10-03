@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTestRunning, useScreenTop } from '../../lib/focus.js';
 import { REACTION, METRICS, randomDelay, computeReaction } from './reaction.js';
+import { ReactionDemo } from '../../components/Mascot.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { say } from '../../lib/cues.js';
+import DotEmoji from '../../components/DotEmoji.jsx';
 
 const TEST = 'reaction';
 
@@ -189,6 +191,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
         </>
       ) : guided ? null : (
         <div className="panel reaction-intro">
+          <ReactionDemo />
           <ul className="tips">
             <li>Use the same device every time; phones and laptops give different times.</li>
             <li>Tapping before green counts as a mistake.</li>
@@ -198,7 +201,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
             className="ghost speak-btn"
             onClick={() => say('Tap the box as soon as it turns green. If you tap too early, just wait for the next one. Use your usual hand.')}
           >
-            🔊 Read the instructions to me
+            <DotEmoji mood="talk" size={24} /> Read the instructions to me
           </button>
           <div className="row">
             <button className="primary" onClick={start}>

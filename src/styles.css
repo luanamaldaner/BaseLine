@@ -1215,3 +1215,154 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
 
 /* Footer sync status: pending results, or the server being unreachable */
 .sync-status { margin: 0.75rem 0 0; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid currentColor; font-size: 0.9rem; }
+
+/* ---------- Dot the mascot: test demos ---------- */
+.demo { margin: 0; display: grid; gap: 0.4rem; justify-items: center; padding: 0.75rem; border-radius: 20px; background: var(--surface-2); }
+.demo-art { width: 100%; max-width: 300px; height: auto; color: var(--text); overflow: visible; }
+.demo figcaption { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; width: 100%; flex-wrap: wrap; }
+.demo-caption { font-weight: 600; font-size: calc(0.95rem * var(--text-scale)); }
+.demo-toggle { min-height: 32px; }
+.dot-legs, .dot-arms { transition: opacity 0.2s; }
+.demo-cue { animation: demo-cue 0.45s ease-out; }
+@keyframes demo-cue { from { opacity: 0; transform: translate(196px, 60px) scale(0.6); } }
+.eye-launch-art { width: auto; height: auto; flex: 1 1 260px; max-width: 320px; background: none; border-radius: 0; }
+.eye-launch-art .demo { width: 100%; }
+.flow-ready .demo { justify-self: start; width: min(100%, 340px); }
+.reaction-intro .demo, .balance-intro .demo { margin-bottom: 0.75rem; }
+.dot-eye { transition: transform 0.08s linear; }
+/* Idle life: a gentle bob and a blink every few seconds */
+.dot-bob { animation: dot-bob 1.8s ease-in-out infinite; }
+@keyframes dot-bob { 50% { transform: translateY(-2.5px); } }
+.dot-blink { transform-box: fill-box; transform-origin: center; animation: dot-blink 3.6s infinite; }
+@keyframes dot-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@media (prefers-reduced-motion: reduce) { .demo-cue, .dot-bob, .dot-blink { animation: none; } .dot-eye { transition: none; } }
+
+
+/* ---------- Test screens on computers ----------
+   Centered instead of hugging the left edge, and the intro uses the width:
+   Dot's demo on the left, the steps and Start on the right. */
+@media (min-width: 641px) {
+  .app.focus .run > .test, .app.focus .run > .flow, .app.focus .run > .gate-before {
+    width: 100%; max-width: 980px; margin-inline: auto;
+  }
+  .app.focus .run > .gate-before { max-width: 680px; }
+  .app.focus .test-bar { max-width: 980px; margin-inline: auto; }
+  .reaction-intro, .balance-intro, .flow-ready {
+    max-width: none; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    column-gap: 1.75rem; align-items: start;
+  }
+  .reaction-intro > .demo, .balance-intro > .demo, .flow-ready > .demo {
+    grid-column: 1; grid-row: 1 / span 8; margin: 0; width: 100%; justify-self: stretch;
+  }
+  .reaction-intro > :not(.demo), .balance-intro > :not(.demo), .flow-ready > :not(.demo) { grid-column: 2; }
+  .reaction-intro > .tips, .balance-intro > .tips { margin-top: 0; }
+  .balance-stage { max-width: 680px; margin-inline: auto; }
+  .flow { max-width: 980px; }
+}
+
+/* ---------- Narrow pages centered on computers ----------
+   Team cards and the person picker are narrower than the page; center them
+   instead of leaving them against the left edge. */
+@media (min-width: 641px) {
+  .team-pages > * { width: 100%; max-width: 760px; margin-inline: auto; }
+  .app:not(.focus) .run { width: 100%; max-width: 880px; margin-inline: auto; }
+}
+
+/* Numbered steps beside the demos: each step on its own, with breathing room
+   (computers; the phone layout stays compact) */
+@media (min-width: 641px) {
+  .tips li + li { margin-top: 0.7rem; }
+  .flow-instr { gap: 1rem; }
+  .reaction-intro .tips, .balance-intro .tips { line-height: 1.5; }
+}
+
+/* Section tabs centered under the header on computers (phones use the bottom bar) */
+@media (min-width: 641px) {
+  .tabs { margin-inline: auto; }
+}
+
+/* ---------- Guided tour ---------- */
+.tutorial-btn { display: inline-flex; align-items: center; gap: 0.35rem; }
+.tutorial-btn > span {
+  display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent-dim); color: var(--mint-ink); font-weight: 800; font-size: 0.8rem;
+}
+.tour { position: fixed; inset: 0; z-index: 400; }
+.tour-dim { position: absolute; inset: 0; background: rgba(12, 14, 16, 0.55); animation: fade-in 0.2s ease; }
+.tour-spot {
+  position: fixed; border-radius: 22px; pointer-events: none;
+  box-shadow: 0 0 0 9999px rgba(12, 14, 16, 0.55), 0 0 0 3px var(--accent);
+  animation: tour-spot-in 0.25s ease;
+}
+@keyframes tour-spot-in { from { opacity: 0; } }
+.tour-card {
+  position: fixed; width: min(380px, calc(100vw - 32px)); display: grid; gap: 0.75rem;
+  padding: 1.25rem 1.35rem; border-radius: 24px; background: var(--surface); box-shadow: var(--shadow-lift);
+  outline: none; animation: tour-card-in 0.25s ease;
+  max-height: calc(100vh - 32px); overflow: auto;
+}
+@keyframes tour-card-in { from { opacity: 0; translate: 0 8px; } }
+/* centered without a transform, so it lands on whole pixels and stays sharp */
+.tour-card.centered { inset: 0; margin: auto; height: fit-content; }
+.tour-head { display: flex; align-items: center; gap: 0.75rem; }
+.tour-dot { width: 102px; height: 96px; flex: none; }
+.tour-head h2 { margin: 0.15rem 0 0; font-size: calc(1.45rem * var(--text-scale)); }
+.tour-body { margin: 0; color: var(--muted); }
+.tour-progress { display: flex; gap: 5px; }
+.tour-progress i { flex: 1; height: 5px; border-radius: 999px; background: var(--surface-2); }
+.tour-progress i.done { background: var(--accent-dim); }
+.tour-progress i.on { background: var(--accent); }
+.tour-actions { display: flex; align-items: center; gap: 0.5rem; }
+@media (max-width: 640px) {
+  .tour-card { width: calc(100vw - 32px); }
+  .tutorial-btn { padding-inline: 0.5rem; }
+}
+@media (prefers-reduced-motion: reduce) { .tour-spot, .tour-card, .tour-dim { animation: none; } }
+
+/* ---------- Learn more: sliding tabs ---------- */
+.info-tabs { position: relative; }
+.info-tabs button { position: relative; z-index: 1; transition: color 0.2s ease; }
+.info-tabs button.active { background: transparent; box-shadow: none; }
+.info-pill {
+  position: absolute; z-index: 0; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow);
+  transition: left 0.32s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.32s cubic-bezier(0.25, 0.1, 0.25, 1), top 0.32s ease;
+}
+.info-panel { overflow: hidden; }
+.info-slide { animation-duration: 0.32s; animation-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1); }
+.info-slide.from-right { animation-name: info-from-right; }
+.info-slide.from-left { animation-name: info-from-left; }
+@keyframes info-from-right { from { opacity: 0; transform: translateX(36px); } }
+@keyframes info-from-left { from { opacity: 0; transform: translateX(-36px); } }
+@media (prefers-reduced-motion: reduce) {
+  .info-pill { transition: none; }
+  .info-slide { animation: none; }
+}
+
+/* Dot emojis and drawn icons sit on the text line */
+.dot-emoji { display: inline-block; vertical-align: -0.28em; flex: none; }
+.speak-btn, .flow-sound { display: inline-flex; align-items: center; gap: 0.45rem; }
+.flow-sound { display: flex; flex-wrap: wrap; }
+.demo-toggle, .test-bar > button, .run > .ghost.small-btn, .player-head > .ghost { display: inline-flex; align-items: center; gap: 0.35rem; }
+.guide-num svg, .check-mark svg { display: block; }
+.icon-btn svg, .modal-close svg { display: block; margin: auto; }
+
+/* ---------- Main tabs: sliding pill and page slide ---------- */
+.tab-pill { display: none; }
+@media (min-width: 641px) {
+  .tabs { position: relative; }
+  .tabs button { position: relative; z-index: 1; transition: color 0.2s ease; }
+  .tabs button.active { background: transparent; box-shadow: none; }
+  .tab-pill {
+    display: block; position: absolute; z-index: 0; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow);
+    transition: left 0.32s cubic-bezier(0.25, 0.1, 0.25, 1), width 0.32s cubic-bezier(0.25, 0.1, 0.25, 1), top 0.32s ease;
+  }
+}
+.app > main { overflow-x: clip; }
+/* the page itself doesn't slide; it just fades in softly */
+.page-slide { animation: page-fade 0.25s ease; }
+@keyframes page-fade { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .tab-pill { transition: none; }
+  .page-slide { animation: none; }
+}
+.touring .page-slide { animation: none; }

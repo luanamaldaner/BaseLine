@@ -145,3 +145,21 @@ export const HistoryIcon = (p) => (
 export const BookIcon = (p) => (
   <Svg {...p}><path d="M12 5v16M12 5C9 3 5 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-3-1-7-1-10 1z" {...stroke} /></Svg>
 );
+
+// Small UI glyphs, drawn so they match the app instead of the device's
+// emoji font.
+export const CheckIcon = (p) => (
+  <Svg {...p}><path d="M5 12.5l4.5 4.5L19 7.5" {...stroke} strokeWidth="2.6" /></Svg>
+);
+export const CloseIcon = (p) => (
+  <Svg {...p}><path d="M6 6l12 12M18 6L6 18" {...stroke} strokeWidth="2.4" /></Svg>
+);
+export const BackIcon = (p) => (
+  <Svg {...p}><path d="M19 12H5M11 6l-6 6 6 6" {...stroke} /></Svg>
+);
+export const PlayIcon = (p) => (
+  <Svg {...p}><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" /></Svg>
+);
+export const PauseIcon = (p) => (
+  <Svg {...p}><g fill="currentColor"><rect x="6.5" y="5" width="4" height="14" rx="1.2" /><rect x="13.5" y="5" width="4" height="14" rx="1.2" /></g></Svg>
+);

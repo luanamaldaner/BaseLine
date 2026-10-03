@@ -3,6 +3,7 @@ import { allTrials, compare, exportCsv } from '../lib/baseline.js';
 import { deleteTrial } from '../lib/session.js';
 import { STATUS, formatWhen } from '../lib/status.js';
 import { formatMetric } from '../components/ResultCards.jsx';
+import { CloseIcon } from '../components/Icons.jsx';
 
 export function download(name, text) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
@@ -38,7 +39,7 @@ export default function History({ subjectUid, subjectName, isSelf, names }) {
   const safeName = subjectName.replace(/[^\w-]+/g, '_');
 
   return (
-    <section className="history">
+    <section className="history" data-tour="history">
       <header className="test-head history-head">
         <div>
           <h2>{isSelf ? 'Your results' : `${subjectName}'s results`}</h2>
@@ -87,7 +88,7 @@ export default function History({ subjectUid, subjectName, isSelf, names }) {
                     </div>
                   </div>
                   <button className="ghost icon-btn" onClick={() => remove(t)} aria-label="Delete result" title="Delete">
-                    ✕
+                    <CloseIcon size={16} />
                   </button>
                 </div>
               );

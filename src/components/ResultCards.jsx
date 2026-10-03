@@ -30,7 +30,7 @@ const STATUS = {
 };
 
 export function formatMetric(value, def) {
-  if (!Number.isFinite(value)) return '—';
+  if (!Number.isFinite(value)) return 'n/a';
   return (value * (def.scale ?? 1)).toFixed(def.digits);
 }
 

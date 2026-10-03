@@ -4,7 +4,7 @@ import { saveHistory } from '../lib/session.js';
 // Pre-existing conditions that shift baselines and recovery: prior
 // concussions, ADHD, vision problems, vestibular (balance) problems. Entered
 // by the athlete, shown to the coach beside results. Lives in
-// teams/{id}/history/{uid}, readable only by the athlete and the coach —
+// teams/{id}/history/{uid}, readable only by the athlete and the coach,
 // never on the member doc the whole team can see.
 
 const FLAGS = [
@@ -58,7 +58,7 @@ export function HistoryForm({ history }) {
   }
 
   return (
-    <div className="history-form panel">
+    <div className="history-form panel" data-tour="history-form">
       <h3>Medical history <span className="muted small">(optional)</span></h3>
       <p className="muted small">
         These change what a normal result looks like and how long recovery takes, so your coaches

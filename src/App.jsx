@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useLayoutEffect, useRef } from 'react';
 import { useScreenTop } from './lib/focus.js';
 import { HomeIcon, HistoryIcon, BookIcon, SymptomsIcon, UsersIcon } from './components/Icons.jsx';
 import { useSession, logOut, teamIdsOf } from './lib/session.js';
@@ -11,8 +11,10 @@ import { HistoryLine } from './components/MedicalHistory.jsx';
 import { Roster, CoachTeam, AthleteTeam, InviteOffer } from './pages/Team.jsx';
 import { Logo, APP_NAME } from './brand.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
+import Tour, { tourSeen, markTourSeen } from './components/Tour.jsx';
 import { ConsentScreen, PrivacyDialog } from './pages/Privacy.jsx';
 import { useCoachAlerts } from './components/Alerts.jsx';
+import { BackIcon } from './components/Icons.jsx';
 
 // UI state that should survive a reload (phones reload tabs in the background).
 function usePersisted(key, initial) {
@@ -87,6 +89,31 @@ function nameMap(s) {
 // footer so the test gets the whole screen on a phone.
 function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
   const [privacy, setPrivacy] = useState(false);
+  // Guided tour: from the Tutorial button, and once on first visit.
+  const [touring, setTouring] = useState(() => !focus && !tourSeen(s.user.uid));
+  const endTour = () => { markTourSeen(s.user.uid); setTouring(false); };
+
+  // Tab transitions: a pill that slides to the active tab, and the page
+  // sliding in from the side of the tab you came from.
+  const tabRefs = useRef({});
+  const [pill, setPill] = useState(null);
+  const order = tabs.map(([id]) => id);
+  const prevTab = useRef(tab);
+  const dirRef = useRef(1);
+  if (prevTab.current !== tab) {
+    dirRef.current = order.indexOf(tab) >= order.indexOf(prevTab.current) ? 1 : -1;
+    prevTab.current = tab;
+  }
+  useLayoutEffect(() => {
+    if (focus) return undefined;
+    const place = () => {
+      const el = tabRefs.current[tab];
+      if (el) setPill({ left: el.offsetLeft, width: el.offsetWidth, top: el.offsetTop, height: el.offsetHeight });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [tab, focus, tabs.length]);
   return (
     <div className={`app${focus ? ' focus' : ''}`}>
       {!focus && (
@@ -100,13 +127,17 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
               <span>
                 <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
               </span>
+              <button className="ghost small-btn tutorial-btn" data-tour="tutorial" onClick={() => setTouring(true)}>
+                <span aria-hidden>?</span> Tutorial
+              </button>
               <ThemeToggle />
               <button className="ghost small-btn" onClick={logOut}>Log out</button>
             </div>
           </header>
           <nav className="tabs">
+            {pill && <span className="tab-pill" aria-hidden="true" style={pill} />}
             {tabs.map(([id, label, shortLabel, Icon]) => (
-              <button key={id} className={id === tab ? 'active' : ''} aria-current={id === tab ? 'page' : undefined} onClick={() => setTab(id)}>
+              <button key={id} ref={(el) => { tabRefs.current[id] = el; }} className={id === tab ? 'active' : ''} aria-current={id === tab ? 'page' : undefined} onClick={() => setTab(id)}>
                 <span className="tab-desktop">{label}</span>
                 <span className="tab-phone">
                   <span className="tab-icon"><Icon />{id === 'roster' && unread > 0 && (
@@ -120,7 +151,12 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
         </>
       )}
       {s.error && <div className="callout danger">{s.error}</div>}
-      <main>{!focus && s.profile.role === 'athlete' && <InviteOffer />}{children}</main>
+      <main>
+        {!focus && s.profile.role === 'athlete' && <InviteOffer />}
+        {focus ? children : (
+          <div key={tab} className={`page-slide ${dirRef.current > 0 ? 'from-right' : 'from-left'}`}>{children}</div>
+        )}
+      </main>
       <SyncStatus s={s} />
       {!focus && (
         <footer className="muted small">
@@ -130,6 +166,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
         </footer>
       )}
       {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
+      {touring && !focus && <Tour role={s.profile.role} setTab={setTab} onClose={endTour} />}
     </div>
   );
 }
@@ -215,7 +252,7 @@ function CoachApp({ s }) {
       {tab === 'roster' && selected && (
         <section>
           <div className="row player-head">
-            <button className="ghost small-btn" onClick={() => setPlayer(null)}>← Roster</button>
+            <button className="ghost small-btn" onClick={() => setPlayer(null)}><BackIcon size={16} /> Roster</button>
             <span className="grow" />
             <div className="seg">
               {[['dashboard', 'Dashboard'], ['history', 'History']].map(([id, label]) => (

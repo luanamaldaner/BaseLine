@@ -5,8 +5,11 @@ import {
   PURSUIT, CALIBRATION, METRICS, targetX, fitCalibration, frameIssue, computePursuit,
 } from './pursuit.js';
 import TracePlot from './TracePlot.jsx';
+import { EyeDemo } from '../../components/Mascot.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { say, hush } from '../../lib/cues.js';
+import DotEmoji from '../../components/DotEmoji.jsx';
+import { CheckIcon, CloseIcon } from '../../components/Icons.jsx';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -56,7 +59,7 @@ export default function EyeTest(props) {
         </p>
       </header>
       <div className="panel eye-launch">
-        <div className="eye-launch-art" aria-hidden><DotBuddy /></div>
+        <div className="eye-launch-art"><EyeDemo /></div>
         <div className="eye-launch-body">
           <p className="small muted" id="eye-device-label">Which device are you using?</p>
           <div className="segmented" role="group" aria-labelledby="eye-device-label">
@@ -84,7 +87,7 @@ export default function EyeTest(props) {
 // results of its own. The camera warms up on mount; the sweep starts when
 // `startSignal` changes and the outcome goes to `onFinished`.
 // onClose: shown in a popup.
-// `speak`: read the walk-through aloud. Off by default — the eyes are open,
+// `speak`: read the walk-through aloud. Off by default: the eyes are open,
 // so the text on the stage is enough; the athlete opts in with the speaker
 // button (or the flow passes it through).
 function EyeScan({
@@ -400,7 +403,7 @@ function EyeScan({
               say('Sit an arm\u2019s length from the screen with your face well lit. Keep your head still and move only your eyes. A dot will appear: look right at it, and when it jumps, look at the new spot. Then follow the moving dot.');
             }}
           >
-            🔊 {readAloud ? 'Read it again' : 'Read the instructions to me'}
+            <DotEmoji mood="talk" size={24} /> {readAloud ? 'Read it again' : 'Read the instructions to me'}
           </button>
           <div className="row">
             <button className="primary" disabled={status !== 'ready'} onClick={runTest}>
@@ -536,11 +539,11 @@ function LiveSignal({ live }) {
   const env = Object.fromEntries(cameraChecks(live).map((c) => [c.id, c.ok]));
   const rows = [
     ['Face', !live.face ? 'not found' : live.faces > 1 ? 'two faces in view' : 'found', live.face && live.faces === 1],
-    ['Head', !live.face ? '—' : facing ? 'facing screen' : 'turn to face screen', live.face && facing],
-    ['Eyes', !live.face ? '—' : live.blink ? 'closed' : 'open', live.face && !live.blink],
-    ['Distance', !live.face ? '—' : env.near ? 'good' : 'move closer', env.near],
-    ['Light', !live.face ? '—' : env.light ? 'good' : 'face the light', env.light],
-    ['Steady', !live.face ? '—' : env.steady ? 'yes' : 'prop it up', env.steady],
+    ['Head', !live.face ? 'waiting' : facing ? 'facing screen' : 'turn to face screen', live.face && facing],
+    ['Eyes', !live.face ? 'waiting' : live.blink ? 'closed' : 'open', live.face && !live.blink],
+    ['Distance', !live.face ? 'waiting' : env.near ? 'good' : 'move closer', env.near],
+    ['Light', !live.face ? 'waiting' : env.light ? 'good' : 'face the light', env.light],
+    ['Steady', !live.face ? 'waiting' : env.steady ? 'yes' : 'prop it up', env.steady],
     ['Camera', live.fps ? `${live.fps.toFixed(0)} fps` : '…', live.fps >= 20],
   ];
   return (
@@ -621,7 +624,7 @@ function EyeModal({ title, subtitle, busy, onClose, children }) {
             <h2 id="eye-modal-title">{title}</h2>
             <p className="muted small">{subtitle}</p>
           </div>
-          <button className="ghost small-btn modal-close" onClick={onClose} aria-label="Close eye scan">✕</button>
+          <button className="ghost small-btn modal-close" onClick={onClose} aria-label="Close eye scan"><CloseIcon size={18} /></button>
         </header>
         {children}
       </div>
@@ -680,7 +683,7 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
         {GUIDE_STEPS.map((label, i) => (
           <li key={label} className={i < step ? 'done' : i === step ? 'current' : ''}
             aria-current={i === step ? 'step' : undefined}>
-            <span className="guide-num" aria-hidden>{i < step ? '✓' : i + 1}</span>
+            <span className="guide-num" aria-hidden>{i < step ? <CheckIcon size={14} /> : i + 1}</span>
             <span className="guide-label">{label}</span>
           </li>
         ))}
@@ -707,7 +710,7 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
             <ul className="guide-checks" aria-live="polite">
               {checks.map(({ id, label, ok, fix }) => (
                 <li key={id} className={ok ? 'ok' : ''}>
-                  <span className="check-mark" aria-hidden>{ok ? '✓' : ''}</span>
+                  <span className="check-mark" aria-hidden>{ok && <CheckIcon size={16} />}</span>
                   <span>
                     <b>{label}</b>
                     {!ok && <span className="muted small"> {fix}</span>}
@@ -736,7 +739,7 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
             <li>It takes about 30 seconds. Press Esc to stop at any time.</li>
           </ol>
           <button className="ghost speak-btn" onClick={onReadAloud}>
-            🔊 {readAloud ? 'Read it again' : 'Read this to me'}
+            <DotEmoji mood="talk" size={24} /> {readAloud ? 'Read it again' : 'Read this to me'}
           </button>
           {progress}
           <div className="row">

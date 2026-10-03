@@ -51,7 +51,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
           onDismiss={alerts.dismiss} onDismissAll={alerts.dismissAll}
         />
       )}
-      <div className="hero">
+      <div className="hero" data-tour="home-cta">
         <p className="eyebrow">{greeting()}{coachName ? `, ${coachName.split(' ')[0]}` : ''}</p>
         <h1>Someone took a hit?</h1>
         <p className="hero-sub">Run a full check in about 4 minutes. We’ll guide you through every step and give you a clear call.</p>
@@ -60,7 +60,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
         </button>
       </div>
 
-      <div className="stats" aria-label="Team summary">
+      <div className="stats" aria-label="Team summary" data-tour="stats">
         {stats.map(({ label, value, Icon, tone }) => (
           <div className={`stat ${tone}`} key={label}>
             <span className="stat-icon"><Icon size={22} /></span>
@@ -70,7 +70,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
         ))}
       </div>
 
-      <div className="home-section">
+      <div className="home-section" data-tour="roster">
         <div className="section-head">
           <h2>Roster</h2>
           {teams.size > 1 && <select aria-label="Filter by team" value={filter} onChange={(e) => setFilter(e.target.value)}>
@@ -160,7 +160,7 @@ function CoachTeamCard({ team, members, names }) {
   return (
     <section className="team-page">
       <h2>{team.name}</h2>
-      <div className="code-card invite-card">
+      <div className="code-card invite-card" data-tour="team-code">
         <div className="invite-qr">
           <QrCode text={link} label={`QR code to join ${team.name}`} />
         </div>

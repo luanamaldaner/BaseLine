@@ -5,12 +5,13 @@ import { TestBadge } from '../components/Icons.jsx';
 import Avatar from '../components/Avatar.jsx';
 import ConditionsGate from '../components/ConditionsGate.jsx';
 import { ConditionsContext } from '../lib/conditions.js';
+import { BackIcon } from '../components/Icons.jsx';
 
 // The one bar shown on a test screen (the app header and tabs are hidden).
 function TestBar({ title, who, onBack }) {
   return (
     <div className="test-bar">
-      <button className="ghost small-btn" onClick={onBack}>← Back</button>
+      <button className="ghost small-btn" onClick={onBack}><BackIcon size={16} /> Back</button>
       <div className="test-bar-title">
         <b>{title}</b>
         <span className="muted small">{who}</span>
@@ -36,7 +37,7 @@ export default function RunTest({ teams, people, selfUid, isCoach, pick, setPick
         )}
         {[...teams.values()].map((team) => <div key={team.id}>
           <h3>{team.name}</h3>
-          <div className="people">
+          <div className="people" data-tour="people">
           {people.filter((p) => p.teamIds.includes(team.id)).map((p) => (
             <button key={p.uid} className="person" onClick={() => setPick({ subjectUid: p.uid, testId: null })}>
               <Avatar name={p.name} />
@@ -105,7 +106,7 @@ export default function RunTest({ teams, people, selfUid, isCoach, pick, setPick
     return (
       <section className="run">
         <button className="ghost small-btn" onClick={() => setPick({ subjectUid: null, testId: null })}>
-          ← Change person
+          <BackIcon size={16} /> Change person
         </button>
         <div className="run-start">
           <Avatar name={subject.name} />

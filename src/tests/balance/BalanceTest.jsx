@@ -4,6 +4,7 @@ import { STANCES, BALANCE, METRICS, computeBalance, scoreStance } from './balanc
 import { formatMetric } from '../../components/ResultCards.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { StanceDiagram } from '../../components/Icons.jsx';
+import { BalanceDemo } from '../../components/Mascot.jsx';
 import { beep, say, buzz, unlockAudio } from '../../lib/cues.js';
 
 const TEST = 'balance';
@@ -204,10 +205,11 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
 
       {phase === 'intro' && !guided && (
         <div className="panel balance-intro">
+          <BalanceDemo />
           <ol className="tips">
             <li>Shoes off, firm floor. The athlete holds the phone flat against their chest with both hands.</li>
             <li>
-              <b>Sound on.</b> Turn the volume up and switch off Silent mode and Do Not Disturb — on an
+              <b>Sound on.</b> Turn the volume up and switch off Silent mode and Do Not Disturb. On an
               iPhone the ring switch mutes web audio. With eyes closed, the beep and the voice are the
               only cues for when to close and open them.
             </li>
