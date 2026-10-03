@@ -8,6 +8,8 @@ rules_version = '2';
 //   - role:   string, 'coach' | 'athlete' (set once, immutable)
 //   - name:   string (1-60) - display name
 //   - teamId: string | null - the one team this user coaches or belongs to
+//   - consentedAt: string, ISO-8601 (optional) - when they agreed to the
+//                  privacy notice; added once, after the profile is created
 //
 // Collection: joinCodes/{code}                (code -> team lookup)
 //   Document ID: 6 chars [A-Z0-9]
@@ -116,7 +118,9 @@ service cloud.firestore {
     // ===============================================================
 
     function isValidUser(d) {
-      return hasExactFields(d, ['role', 'name', 'teamId']) &&
+      return d.keys().hasAll(['role', 'name', 'teamId']) &&
+        d.keys().hasOnly(['role', 'name', 'teamId', 'consentedAt']) &&
+        (!('consentedAt' in d) || isValidDateString(d.consentedAt)) &&
         d.role in ['coach', 'athlete'] &&
         validName(d.name) &&
         (d.teamId == null || (d.teamId is string && d.teamId.size() <= 128));
@@ -198,6 +202,8 @@ service cloud.firestore {
       // set from null to a team the user has actually joined or created.
       allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
         request.resource.data.role == resource.data.role &&
+        (!('consentedAt' in resource.data) ||
+          request.resource.data.get('consentedAt', null) == resource.data.consentedAt) &&
         (
           request.resource.data.teamId == resource.data.teamId ||
           request.resource.data.teamId == null ||

@@ -5,6 +5,8 @@ import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } fro
 import { removeMember, leaveTeam } from '../lib/session.js';
 import { download } from './History.jsx';
 import Avatar from '../components/Avatar.jsx';
+import QrCode from '../components/QrCode.jsx';
+import { inviteUrl } from '../lib/invite.js';
 import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
 
 const RANK = { refer: 0, monitor: 1, normal: 2, none: 3 };
@@ -26,7 +28,8 @@ function greeting() {
 
 // Coach home: a way straight into a check, team numbers, and everyone on the
 // team with flagged players first.
-export function Roster({ members, coachName, onOpen, onRunCheck }) {
+export function Roster({ members, coachName, newFlags = [], onOpen, onRunCheck }) {
+  const newFor = new Set(newFlags.map((t) => t.subjectUid));
   const rows = members
     .map((m) => ({ ...m, ...playerSummary(m.uid) }))
     .sort((a, b) => RANK[a.overall] - RANK[b.overall] || a.name.localeCompare(b.name));
@@ -48,6 +51,18 @@ export function Roster({ members, coachName, onOpen, onRunCheck }) {
           Run a check <ArrowIcon size={20} />
         </button>
       </div>
+
+      {newFlags.length > 0 && (
+        <div className="status-banner bad new-flags" role="status">
+          <b>
+            {newFlags.length} new flagged result{newFlags.length === 1 ? '' : 's'} since you last looked
+          </b>
+          <span>
+            {[...newFor].map((uid) => members.find((m) => m.uid === uid)?.name).filter(Boolean).join(', ')}.
+            Tap a player marked <b>New</b> to see what happened.
+          </span>
+        </div>
+      )}
 
       <div className="stats" aria-label="Team summary">
         {stats.map(({ label, value, Icon, tone }) => (
@@ -83,6 +98,7 @@ export function Roster({ members, coachName, onOpen, onRunCheck }) {
                         {r.lastCheck ? `Checked ${formatWhen(r.lastCheck)}` : 'No checks yet'}
                       </span>
                     </span>
+                    {newFor.has(r.uid) && <span className="chip new">New</span>}
                     <Ring done={r.baselinesDone} total={TESTS.length} />
                     <span className={`chip ${st?.cls ?? 'muted'}`}>{st ? st.short : 'No checks'}</span>
                   </button>
@@ -115,12 +131,23 @@ function Ring({ done, total }) {
 
 // Coach: join code + manage athletes.
 export function CoachTeam({ team, members, names }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard?.writeText(team.code).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+  const [copied, setCopied] = useState(null); // 'code' | 'link'
+  const link = inviteUrl(team.code);
+  const copy = (what, text) => {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(what);
+      setTimeout(() => setCopied(null), 1500);
     });
+  };
+  const share = async () => {
+    const text = `Join ${team.name} on Baseline: ${link}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Join ${team.name}`, text, url: link });
+      } catch {
+        /* cancelled */
+      }
+    } else copy('link', link);
   };
   const remove = (m) => {
     if (confirm(`Remove ${m.name} from ${team.name}? Their results stay saved.`)) {
@@ -131,13 +158,26 @@ export function CoachTeam({ team, members, names }) {
   return (
     <section className="team-page">
       <h2>{team.name}</h2>
-      <div className="code-card">
-        <span className="muted small">Team code</span>
-        <div className="code">{team.code}</div>
-        <button className="small-btn" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
-        <p className="muted small">
-          Athletes sign up, choose <b>Athlete</b>, and enter this code.
-        </p>
+      <div className="code-card invite-card">
+        <div className="invite-qr">
+          <QrCode text={link} label={`QR code to join ${team.name}`} />
+        </div>
+        <div className="invite-info">
+          <span className="muted small">Scan to join</span>
+          <p className="small">
+            Athletes point their phone camera here. It opens the app with this team filled in.
+          </p>
+          <span className="muted small">Or use the team code</span>
+          <div className="code">{team.code}</div>
+          <div className="row">
+            <button className="small-btn" onClick={() => copy('code', team.code)}>
+              {copied === 'code' ? 'Copied' : 'Copy code'}
+            </button>
+            <button className="small-btn" onClick={share}>
+              {copied === 'link' ? 'Link copied' : 'Share invite link'}
+            </button>
+          </div>
+        </div>
       </div>
       <div className="row">
         <h3 className="grow">Athletes ({members.length})</h3>

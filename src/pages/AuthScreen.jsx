@@ -5,6 +5,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth } from '../lib/firebase.js';
+import { pendingInvite } from '../lib/invite.js';
 import { Brand } from '../brand.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 
@@ -23,7 +24,8 @@ const MESSAGES = {
 const friendly = (e) => MESSAGES[e?.code] ?? 'Something went wrong. Try again.';
 
 export default function AuthScreen() {
-  const [mode, setMode] = useState('login'); // login | signup | reset
+  const invite = pendingInvite();
+  const [mode, setMode] = useState(invite ? 'signup' : 'login'); // login | signup | reset
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -63,6 +65,11 @@ export default function AuthScreen() {
       <form className="gate-card" onSubmit={submit}>
         <Brand className="gate-brand" />
         <h1>{title}</h1>
+        {invite && mode !== 'reset' && (
+          <div className="callout small invite-note">
+            You’re joining a team (code <b>{invite}</b>). {mode === 'signup' ? 'Create an account to continue, or log in if you already have one.' : 'Log in to continue.'}
+          </div>
+        )}
         <p className="muted">
           {mode === 'signup'
             ? 'Coaches and athletes both sign up here. Next you’ll choose which you are.'

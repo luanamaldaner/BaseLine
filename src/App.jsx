@@ -8,6 +8,8 @@ import RunTest from './pages/RunTest.jsx';
 import { Roster, CoachTeam, AthleteTeam } from './pages/Team.jsx';
 import { Logo, APP_NAME } from './brand.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
+import { pendingInvite, clearInvite } from './lib/invite.js';
+import { ConsentScreen, PrivacyDialog } from './pages/Privacy.jsx';
 
 // UI state that should survive a reload (phones reload tabs in the background).
 function usePersisted(key, initial) {
@@ -36,13 +38,16 @@ export default function App() {
 
   if (!s.authChecked) return <Splash text="Loading…" />;
   if (!s.user) return <AuthScreen />;
-  if (s.profile === undefined) return <Splash text="Loading your account…" />;
+  if (s.profile === undefined) return <Splash text={s.error ?? 'Loading your account…'} />;
   if (!s.profile) return <ProfileSetup email={email} />;
+  if (!s.profile.consentedAt) return <ConsentScreen email={email} />;
   if (!s.profile.teamId) return <TeamSetup role={s.profile.role} email={email} />;
   if (s.team === undefined || !s.trialsReady) return <Splash text="Loading your team…" />;
   if (s.team === null) {
     return <TeamSetup role={s.profile.role} email={email} notice="That team no longer exists." />;
   }
+  // Already on a team: an invite link opened later has nothing left to do.
+  if (pendingInvite()) clearInvite();
   return s.profile.role === 'coach' ? <CoachApp s={s} /> : <AthleteApp s={s} />;
 }
 
@@ -63,35 +68,46 @@ function nameMap(s) {
   return names;
 }
 
-function Frame({ s, tabs, tab, setTab, children }) {
+// focus: a test screen. The test's own bar replaces the header, tabs, and
+// footer so the test gets the whole screen on a phone.
+function Frame({ s, tabs, tab, setTab, focus = false, children }) {
+  const [privacy, setPrivacy] = useState(false);
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <Logo /> <span>{APP_NAME}</span>
-          <span className="team-name">{s.team.name}</span>
-        </div>
-        <div className="athlete">
-          <span>
-            <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
-          </span>
-          <ThemeToggle />
-          <button className="ghost small-btn" onClick={logOut}>Log out</button>
-        </div>
-      </header>
-      <nav className="tabs">
-        {tabs.map(([id, label]) => (
-          <button key={id} className={id === tab ? 'active' : ''} onClick={() => setTab(id)}>
-            {label}
-          </button>
-        ))}
-      </nav>
+    <div className={`app${focus ? ' focus' : ''}`}>
+      {!focus && (
+        <>
+          <header className="topbar">
+            <div className="brand">
+              <Logo /> <span>{APP_NAME}</span>
+              <span className="team-name">{s.team.name}</span>
+            </div>
+            <div className="athlete">
+              <span>
+                <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
+              </span>
+              <ThemeToggle />
+              <button className="ghost small-btn" onClick={logOut}>Log out</button>
+            </div>
+          </header>
+          <nav className="tabs">
+            {tabs.map(([id, label]) => (
+              <button key={id} className={id === tab ? 'active' : ''} onClick={() => setTab(id)}>
+                {label}
+              </button>
+            ))}
+          </nav>
+        </>
+      )}
       {s.error && <div className="callout danger">{s.error}</div>}
       <main>{children}</main>
-      <footer className="muted small">
-        Screening tool, not a diagnosis. Any athlete with a suspected concussion should be
-        removed from play and evaluated by a clinician.
-      </footer>
+      {!focus && (
+        <footer className="muted small">
+          Screening tool, not a diagnosis. Any athlete with a suspected concussion should be
+          removed from play and evaluated by a clinician.{' '}
+          <button type="button" className="link" onClick={() => setPrivacy(true)}>Privacy</button>
+        </footer>
+      )}
+      {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
     </div>
   );
 }
@@ -111,6 +127,7 @@ function AthleteApp({ s }) {
     <Frame
       s={s}
       tab={tab}
+      focus={tab === 'test' && !!pick.subjectUid && !!pick.testId}
       setTab={(t) => { if (t === 'test') setPick({ subjectUid: null, testId: null }); setTab(t); }}
       tabs={[['me', 'My dashboard'], ['test', 'Run a test'], ['history', 'My history'], ['team', 'Team']]}
     >
@@ -122,8 +139,36 @@ function AthleteApp({ s }) {
   );
 }
 
+// Post-hit checks that need the coach's attention.
+const FLAGGED = new Set(['monitor', 'refer', 'no-baseline']);
+
+// When this coach last looked at the home screen, per device.
+function useSeenAt(key) {
+  const [seenAt, setSeenAt] = useState(() => {
+    try {
+      return localStorage.getItem(key) ?? '';
+    } catch {
+      return '';
+    }
+  });
+  const markSeen = () => {
+    const now = new Date().toISOString();
+    setSeenAt(now);
+    try {
+      localStorage.setItem(key, now);
+    } catch {
+      /* private mode */
+    }
+  };
+  return [seenAt, markSeen];
+}
+
 function CoachApp({ s }) {
   const [tab, setTab] = usePersisted('tab:coach', 'roster');
+  const [seenAt, markSeen] = useSeenAt(`seen:${s.team.id}`);
+  const newFlags = [...s.trials.values()].filter(
+    (t) => t.kind === 'check' && FLAGGED.has(t.status) && t.at > seenAt,
+  );
   const [player, setPlayer] = usePersisted('player:coach', null);
   const [playerTab, setPlayerTab] = usePersisted('playerTab:coach', 'dashboard');
   const [pick, setPick] = usePersisted('pick:coach', { subjectUid: null, testId: null });
@@ -140,18 +185,25 @@ function CoachApp({ s }) {
     <Frame
       s={s}
       tab={tab}
+      focus={tab === 'test' && !!pick.subjectUid && !!pick.testId}
       setTab={(t) => {
+        if (tab === 'roster' && t !== 'roster') markSeen(); // leaving home = seen
         if (t === 'roster') setPlayer(null);
         if (t === 'test') setPick({ subjectUid: null, testId: null });
         setTab(t);
       }}
-      tabs={[['roster', 'Home'], ['test', 'Run a check'], ['team', 'Team']]}
+      tabs={[
+        ['roster', <>Home{newFlags.length > 0 && <span className="tab-badge" aria-label={`${newFlags.length} new`}>{newFlags.length}</span>}</>],
+        ['test', 'Run a check'],
+        ['team', 'Team'],
+      ]}
     >
       {tab === 'roster' && !selected && (
         <Roster
           members={members}
           coachName={s.profile.name}
-          onOpen={(uid) => { setPlayer(uid); setPlayerTab('dashboard'); }}
+          newFlags={newFlags}
+          onOpen={(uid) => { markSeen(); setPlayer(uid); setPlayerTab('dashboard'); }}
           onRunCheck={() => { setPick({ subjectUid: null, testId: null }); setTab('test'); }}
         />
       )}

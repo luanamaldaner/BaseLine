@@ -827,3 +827,80 @@ button.brand-btn:active:not(:disabled) { transform: none; box-shadow: none; }
   grid-template-columns: minmax(0, 1fr);
 }
 main { min-width: 0; }
+
+/* Team invite: QR + code */
+.invite-card { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 1.25rem; align-items: center; }
+.invite-qr { width: clamp(150px, 38vw, 200px); padding: 10px; background: #fff; border-radius: 14px; }
+.qr svg { display: block; width: 100%; height: auto; }
+.invite-info { display: grid; gap: 0.35rem; justify-items: start; min-width: 0; }
+.invite-info p { margin: 0 0 0.5rem; }
+.invite-info .row { margin-top: 0.25rem; }
+@media (max-width: 520px) {
+  .invite-card { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; }
+  .invite-info { justify-items: center; }
+  .invite-qr { width: min(240px, 70vw); }
+}
+.invite-note { margin: 0; }
+
+/* Privacy notice, consent, dialog */
+.privacy { display: grid; gap: 0.35rem; font-size: calc(0.95rem * var(--text-scale)); }
+.privacy h3 { margin: 0.6rem 0 0; font-size: calc(1rem * var(--text-scale)); }
+.privacy p, .privacy ul { margin: 0; color: var(--muted); }
+.privacy ul { padding-left: 1.1rem; display: grid; gap: 0.25rem; }
+.privacy b { color: var(--text); }
+.consent-card { max-width: 560px; }
+.check { display: flex; gap: 0.6rem; align-items: flex-start; cursor: pointer; }
+.check input { width: 20px; height: 20px; min-height: 0; margin: 0.15rem 0 0; flex: none; padding: 0; box-shadow: none; accent-color: var(--accent); }
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 200; display: grid; place-items: center;
+  padding: 16px; background: rgba(0, 0, 0, 0.55);
+}
+.dialog {
+  width: 100%; max-width: 600px; max-height: min(85vh, 85dvh); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: clamp(1rem, 4vw, 1.5rem);
+}
+.dialog-head { margin: 0 0 0.25rem; }
+
+/* "New since you last looked" */
+.tab-badge {
+  display: inline-grid; place-items: center; min-width: 1.35em; height: 1.35em; padding: 0 0.35em;
+  margin-left: 0.4em; border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: calc(0.72rem * var(--text-scale)); font-weight: 700; line-height: 1; vertical-align: 0.1em;
+}
+.chip.new { color: var(--danger); border-color: var(--danger); }
+.new-flags b { font-size: calc(1.05rem * var(--text-scale)); }
+
+/* Page fills the screen, so the footer sits at the bottom of short pages
+   instead of floating halfway up. */
+.app { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+.app > main { flex: 1; }
+
+/* Test screen: one compact bar instead of the header, tabs, and footer. */
+.app.focus { padding-top: max(8px, env(safe-area-inset-top)); }
+.test-bar {
+  position: sticky; top: 0; z-index: 20;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.55rem 0; margin: 0 0 0.75rem;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.test-bar-title { display: grid; min-width: 0; line-height: 1.25; }
+.test-bar-title b, .test-bar-title span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* While a test runs: the test gets the whole screen. */
+.test-running .test-bar,
+.test-running .test-head { display: none; }
+.test-running .app { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+.test-running .reaction-head { margin-top: 0; }
+.test-running .reaction-pad {
+  height: calc(100vh - 6rem);
+  height: calc(100dvh - 6rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  min-height: 260px;
+}
+.test-running .balance-live {
+  min-height: calc(100vh - 5rem);
+  min-height: calc(100dvh - 5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  align-content: center;
+}
+/* "Press Space" means nothing on a phone. */
+@media (pointer: coarse) { .reaction-hint { display: none; } }

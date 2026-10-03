@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { createProfile, createTeam, joinTeam, logOut } from '../lib/session.js';
+import { pendingInvite, clearInvite } from '../lib/invite.js';
 import { Brand } from '../brand.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 
@@ -23,7 +24,8 @@ function Shell({ title, intro, children, email }) {
 
 // Step 1: coach or athlete, and a display name.
 export function ProfileSetup({ email }) {
-  const [role, setRole] = useState(null);
+  // Arrived through a team invite: almost certainly an athlete.
+  const [role, setRole] = useState(pendingInvite() ? 'athlete' : null);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -79,7 +81,8 @@ export function ProfileSetup({ email }) {
 
 // Step 2: coach creates a team; athlete joins with a code.
 export function TeamSetup({ role, email, notice }) {
-  const [value, setValue] = useState('');
+  const invite = role === 'athlete' ? pendingInvite() : null;
+  const [value, setValue] = useState(invite ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const coach = role === 'coach';
@@ -90,7 +93,10 @@ export function TeamSetup({ role, email, notice }) {
     setError(null);
     try {
       if (coach) await createTeam(value);
-      else await joinTeam(value);
+      else {
+        await joinTeam(value);
+        clearInvite();
+      }
     } catch (err) {
       setError(
         err.code === 'permission-denied'
@@ -114,6 +120,7 @@ export function TeamSetup({ role, email, notice }) {
       email={email}
     >
       {notice && <div className="callout warn small">{notice}</div>}
+      {invite && <p className="muted small">Code filled in from your coach’s invite. Tap Join team.</p>}
       <form className="setup-form" onSubmit={submit}>
         <input
           value={value}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTestRunning } from '../../lib/focus.js';
 import { REACTION, METRICS, randomDelay, computeReaction } from './reaction.js';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { say } from '../../lib/cues.js';
@@ -152,6 +153,8 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  useTestRunning(phase === 'running');
+
   return (
     <section className="test">
       {!guided && (
@@ -181,7 +184,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
           >
             <span ref={textRef}>Wait for green…</span>
           </div>
-          <p className="muted small">Tap the box, or press Space on a keyboard.</p>
+          <p className="muted small reaction-hint">Tap the box, or press Space on a keyboard.</p>
         </>
       ) : guided ? null : (
         <div className="panel reaction-intro">

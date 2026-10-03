@@ -64,7 +64,16 @@ function startTeam(teamId, uid, role) {
   stopTeam();
   const fail = (e) => set({ error: e.message });
   unsubs.team.push(
-    onSnapshot(doc(db, 'teams', teamId), (d) => set({ team: d.exists() ? { id: d.id, ...d.data() } : null }), fail),
+    onSnapshot(
+      doc(db, 'teams', teamId),
+      { includeMetadataChanges: true },
+      (d) => {
+        // "Team not found" from an empty cache isn't real: wait for the server.
+        if (!d.exists() && d.metadata.fromCache) return;
+        set({ team: d.exists() ? { id: d.id, ...d.data() } : null });
+      },
+      fail,
+    ),
     onSnapshot(collection(db, 'teams', teamId, 'members'), (snap) => {
       const members = new Map(snap.docs.map((d) => [d.id, { uid: d.id, ...d.data() }]));
       set({ members });
@@ -93,31 +102,78 @@ function startTeam(teamId, uid, role) {
   );
 }
 
+let profileRetry = null;
+
+// Live connection to the signed-in user's profile. If it drops (network,
+// token refresh), stay on the loading screen with the error and reconnect,
+// rather than showing "coach or athlete?" as if the profile were missing.
+function watchProfile(user) {
+  unsubs.profile?.();
+  clearTimeout(profileRetry);
+  let teamKey = null;
+  let heardFromServer = false;
+  let cacheFallback = null;
+  const apply = (d) => {
+    clearTimeout(cacheFallback);
+    const profile = d.exists() ? d.data() : null;
+    set({ profile, error: null });
+    const key = profile?.teamId ? `${profile.teamId}:${profile.role}` : null;
+    if (key !== teamKey) {
+      teamKey = key;
+      if (key) startTeam(profile.teamId, user.uid, profile.role);
+      else {
+        stopTeam();
+        set({ team: null, members: new Map(), trials: new Map(), trialsReady: false, ranges: new Map() });
+      }
+    }
+  };
+  unsubs.profile = onSnapshot(
+    doc(db, 'users', user.uid),
+    { includeMetadataChanges: true },
+    (d) => {
+      if (!d.metadata.fromCache) heardFromServer = true;
+      // The offline cache can be empty or stale right after login. Only
+      // trust it on its own if it has a complete profile (with a team);
+      // otherwise wait for the server, so nobody is sent back through
+      // onboarding. Fall back to the cache after a few seconds offline.
+      const complete = d.exists() && !!d.data().teamId;
+      if (!heardFromServer && !complete) {
+        clearTimeout(cacheFallback);
+        cacheFallback = setTimeout(() => apply(d), 6000);
+        return;
+      }
+      apply(d);
+    },
+    (e) => {
+      clearTimeout(cacheFallback);
+      console.error('Profile connection failed', e);
+      set({ error: `Can’t load your account (${e.code ?? e.message}). Retrying…` });
+      profileRetry = setTimeout(() => {
+        if (auth.currentUser?.uid === user.uid) watchProfile(user);
+      }, 3000);
+    },
+  );
+}
+
 onAuthStateChanged(auth, (user) => {
   unsubs.profile?.();
+  clearTimeout(profileRetry);
   stopTeam();
   state = { ...empty(), authChecked: true, user };
   listeners.forEach((fn) => fn());
-  if (!user) return;
-  let teamKey = null;
-  unsubs.profile = onSnapshot(
-    doc(db, 'users', user.uid),
-    (d) => {
-      const profile = d.exists() ? d.data() : null;
-      set({ profile });
-      const key = profile?.teamId ? `${profile.teamId}:${profile.role}` : null;
-      if (key !== teamKey) {
-        teamKey = key;
-        if (key) startTeam(profile.teamId, user.uid, profile.role);
-        else {
-          stopTeam();
-          set({ team: null, members: new Map(), trials: new Map(), trialsReady: false, ranges: new Map() });
-        }
-      }
-    },
-    (e) => set({ error: e.message, profile: null }),
-  );
+  if (user) watchProfile(user);
 });
+
+// Resolves when the write is confirmed, or rejects after `ms` so a button
+// never stays stuck on a dead connection.
+function withTimeout(promise, ms = 12000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('This is taking too long. Check your connection and try again.')), ms),
+    ),
+  ]);
+}
 
 // ---------------------------------------------------------------- actions
 
@@ -126,8 +182,17 @@ const now = () => new Date().toISOString();
 
 export const logOut = () => signOut(auth);
 
-export function createProfile(role, name) {
-  return setDoc(doc(db, 'users', uid()), { role, name: name.trim().slice(0, 60), teamId: null });
+// Agreement to the privacy notice, saved once on the profile.
+export function recordConsent() {
+  return withTimeout(updateDoc(doc(db, 'users', uid()), { consentedAt: now() }));
+}
+
+export async function createProfile(role, name) {
+  const data = { role, name: name.trim().slice(0, 60), teamId: null };
+  await withTimeout(setDoc(doc(db, 'users', uid()), data));
+  // Don't depend on the live connection to move on.
+  if (!state.profile) set({ profile: data });
+  watchProfile(auth.currentUser);
 }
 
 // No 0/O/1/I so codes are easy to read out loud.
@@ -153,7 +218,7 @@ export async function createTeam(teamName) {
     batch.set(doc(db, 'joinCodes', code), { teamId: teamRef.id });
     batch.update(doc(db, 'users', me), { teamId: teamRef.id });
     try {
-      await batch.commit();
+      await withTimeout(batch.commit());
       return;
     } catch (e) {
       // A taken code fails the write; try another one.
@@ -172,7 +237,7 @@ export async function joinTeam(rawCode) {
   const batch = writeBatch(db);
   batch.set(doc(db, 'teams', teamId, 'members', me), { name: state.profile.name, code, joinedAt: now() });
   batch.update(doc(db, 'users', me), { teamId });
-  await batch.commit();
+  await withTimeout(batch.commit());
 }
 
 export async function leaveTeam() {
@@ -180,7 +245,7 @@ export async function leaveTeam() {
   const batch = writeBatch(db);
   batch.delete(doc(db, 'teams', state.profile.teamId, 'members', me));
   batch.update(doc(db, 'users', me), { teamId: null });
-  await batch.commit();
+  await withTimeout(batch.commit());
 }
 
 export function removeMember(memberUid) {

@@ -3,6 +3,19 @@ import Flow from './Flow.jsx';
 import { TestBadge } from '../components/Icons.jsx';
 import Avatar from '../components/Avatar.jsx';
 
+// The one bar shown on a test screen (the app header and tabs are hidden).
+function TestBar({ title, who, onBack }) {
+  return (
+    <div className="test-bar">
+      <button className="ghost small-btn" onClick={onBack}>← Back</button>
+      <div className="test-bar-title">
+        <b>{title}</b>
+        <span className="muted small">{who}</span>
+      </div>
+    </div>
+  );
+}
+
 // Pick who to test, then which test, then run it.
 // people: [{ uid, name }] the viewer may test. selfUid: the viewer if they're
 // an athlete (null for the coach). pick/setPick persist across reloads.
@@ -43,14 +56,11 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
   if (pick.testId === 'all') {
     return (
       <section className="run">
-        <div className="row run-crumbs">
-          <button className="ghost small-btn" onClick={() => setPick({ ...pick, testId: null })}>
-            ← Change test
-          </button>
-          <span className="muted small">
-            Testing <b>{isSelf ? 'yourself' : subject.name}</b>
-          </span>
-        </div>
+        <TestBar
+          title="All three tests"
+          who={isSelf ? 'Testing yourself' : `Testing ${subject.name}`}
+          onBack={() => setPick({ ...pick, testId: null })}
+        />
         <Flow
           key={subject.uid}
           subject={subject}
@@ -96,14 +106,11 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
 
   return (
     <section className="run">
-      <div className="row run-crumbs">
-        <button className="ghost small-btn" onClick={() => setPick({ ...pick, testId: null })}>
-          ← Change test
-        </button>
-        <span className="muted small">
-          Testing <b>{isSelf ? 'yourself' : subject.name}</b>
-        </span>
-      </div>
+      <TestBar
+        title={test.label}
+        who={isSelf ? 'Testing yourself' : `Testing ${subject.name}`}
+        onBack={() => setPick({ ...pick, testId: null })}
+      />
       <test.Component
         key={`${subject.uid}:${test.id}`}
         subject={subject}
