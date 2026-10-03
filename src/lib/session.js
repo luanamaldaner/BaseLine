@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
-  collection, doc, onSnapshot, query, where, writeBatch, deleteDoc, setDoc, updateDoc, getDocFromServer, getDocsFromServer, runTransaction,
+  collection, doc, getDoc, onSnapshot, query, where, writeBatch, deleteDoc, setDoc, updateDoc, getDocFromServer, getDocsFromServer, runTransaction,
 } from 'firebase/firestore';
 import { auth, db } from './firebase.js';
 import {
@@ -192,49 +192,71 @@ function migrateProfile(userId) {
   return migrating.get(userId);
 }
 
+// Migration steps are server round trips; on a flaky venue connection one of
+// them can take longer than the usual 12 s, and the whole chain used to
+// restart from the top every time, which could repeat forever.
+const MIGRATE_MS = 40000;
+
 async function copyTeamTrials(userId, teamId) {
-  const old = await withTimeout(getDocsFromServer(query(collection(db, 'teams', teamId, 'trials'), where('subjectUid', '==', userId))));
+  const old = await withTimeout(getDocsFromServer(query(collection(db, 'teams', teamId, 'trials'), where('subjectUid', '==', userId))), MIGRATE_MS);
   for (const trial of old.docs) {
     const target = doc(db, 'users', userId, 'trials', trial.id);
     await withTimeout(runTransaction(db, async (tx) => {
       if (!(await tx.get(target)).exists()) tx.set(target, { ...trial.data(), teamId: trial.data().kind === 'check' ? teamId : null });
-    }));
+    }), MIGRATE_MS);
   }
 }
 
+// Moves a profile from the one-team model (teamId) to teamIds + coachUids.
+//
+// The link is written FIRST. coachUids is what lets the coach read this
+// athlete's new results, and it used to sit at the end of the chain, behind
+// a copy of every old result; a chain that kept dying partway never granted
+// it. Copying old results now follows, best-effort: they stay visible at
+// their old path meanwhile, which both the athlete and the coach still read.
+// Team and member docs are read cache-tolerant (getDoc), since a team's coach
+// does not change and a slow server read must not sink the link.
 async function copyLegacyProfile(userId) {
   try {
     const ref = doc(db, 'users', userId);
-    const profile = (await withTimeout(getDocFromServer(ref))).data();
+    const profile = (await withTimeout(getDocFromServer(ref), MIGRATE_MS)).data();
     if (!profile || (profile.teamIds && (!profile.teamId || profile.teamId === profile.teamIds[0]))) return;
     let teamIds = [...teamIdsOf(profile)];
     let coachUids = [...(profile.coachUids ?? [])];
     const oldLink = profile.teamId && (!profile.teamIds || !teamIds.includes(profile.teamId));
+    const copies = []; // teams whose old results still need copying, after the link
     if (oldLink && profile.teamIds && profile.role === 'athlete') {
       // An older client may have left its first team before joining another.
-      const memberships = await Promise.all(teamIds.map((id) => withTimeout(getDocFromServer(doc(db, 'teams', id, 'members', userId)))));
-      for (let i = 0; i < teamIds.length; i++) if (!memberships[i].exists()) await copyTeamTrials(userId, teamIds[i]);
+      const memberships = await Promise.all(teamIds.map((id) => withTimeout(getDoc(doc(db, 'teams', id, 'members', userId)), MIGRATE_MS)));
+      for (let i = 0; i < teamIds.length; i++) if (!memberships[i].exists()) copies.push(teamIds[i]);
       teamIds = teamIds.filter((id, i) => memberships[i].exists());
-      const remaining = await Promise.all(teamIds.map((id) => withTimeout(getDocFromServer(doc(db, 'teams', id)))));
+      const remaining = await Promise.all(teamIds.map((id) => withTimeout(getDoc(doc(db, 'teams', id)), MIGRATE_MS)));
       coachUids = [...new Set(remaining.filter((d) => d.exists()).map((d) => d.data().coachUid))];
     }
     if (oldLink) {
-      const team = await withTimeout(getDocFromServer(doc(db, 'teams', profile.teamId)));
+      const team = await withTimeout(getDoc(doc(db, 'teams', profile.teamId)), MIGRATE_MS);
       const member = profile.role === 'athlete'
-        ? await withTimeout(getDocFromServer(doc(db, 'teams', profile.teamId, 'members', userId))) : null;
+        ? await withTimeout(getDoc(doc(db, 'teams', profile.teamId, 'members', userId)), MIGRATE_MS) : null;
       const belongs = team.exists() && (member?.exists() || team.data().coachUid === userId);
       if (belongs && !teamIds.includes(profile.teamId)) teamIds.push(profile.teamId);
       if (belongs && profile.role === 'athlete' && !coachUids.includes(team.data().coachUid)) coachUids.push(team.data().coachUid);
-    }
-    if (profile.role === 'athlete' && oldLink) {
-      await copyTeamTrials(userId, profile.teamId);
+      if (profile.role === 'athlete') copies.push(profile.teamId);
     }
     await withTimeout(runTransaction(db, async (tx) => {
       const latest = (await tx.get(ref)).data();
       if (JSON.stringify(latest.teamIds) === JSON.stringify(profile.teamIds) && latest.teamId === profile.teamId) {
         tx.update(ref, { teamIds, teamId: teamIds[0] ?? null, ...(profile.role === 'athlete' ? { coachUids } : {}) });
       }
-    }));
+    }), MIGRATE_MS);
+    if (state.error?.startsWith('Moving your saved results')) set({ error: null });
+    for (const teamId of copies) {
+      try {
+        await copyTeamTrials(userId, teamId);
+      } catch {
+        // Still readable at the old path; try the copy again shortly.
+        setTimeout(() => { if (auth.currentUser?.uid === userId) copyTeamTrials(userId, teamId).catch(() => {}); }, 15000);
+      }
+    }
   } catch (e) {
     if (auth.currentUser?.uid === userId) {
       set({ error: 'Moving your saved results could not finish. Retrying…' });

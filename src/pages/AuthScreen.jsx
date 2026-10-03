@@ -18,6 +18,10 @@ const MESSAGES = {
   'auth/user-not-found': 'No account with that email.',
   'auth/wrong-password': 'Wrong email or password.',
   'auth/too-many-requests': 'Too many tries. Wait a minute and try again.',
+  // Firebase rate-limits sign-ins per network; a whole team logging in from
+  // one venue Wi-Fi can trip it. Sessions persist, so logging out is never
+  // needed to fix syncing.
+  'auth/quota-exceeded': 'Too many sign-ins from this network right now. Wait five minutes, or switch to cellular. You don’t need to log out to fix syncing.',
   'auth/network-request-failed': 'No internet connection. Signing in needs a connection the first time.',
 };
 
