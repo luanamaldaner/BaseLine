@@ -37,15 +37,22 @@ rules_version = '2';
 //       balance:  sway, singleSway, errors
 //       reaction: medianMs, spreadMs, mistakes
 //       eye:      onTarget, gain, saccadeRate, lagMs, trackingError
-//   - status:     'normal' | 'monitor' | 'refer' | 'no-baseline'
-//                 (checks only; written by the recordCheck Cloud Function)
-//   Clients may only create their OWN baselines. Post-hit checks are written
-//   by the recordCheck Cloud Function (Admin SDK, bypasses these rules) so a
-//   tester never needs read access to a teammate's baseline.
+//   - status:     'normal' | 'monitor' | 'refer' | 'no-baseline' (checks only)
+//   Baselines: only your own. Checks: anyone on the team (or the coach) may
+//   create one for any athlete on the team, but can never read it back.
 //   Readable only by the athlete it belongs to and the team's coach.
 //
+// Collection: teams/{teamId}/ranges/{subjectUid}_{test}
+//   Baseline cutoffs an athlete publishes so teammates' phones can judge a
+//   post-hit check without seeing any results. No results are stored here.
+//   - subjectUid: string
+//   - test:       'balance' | 'reaction' | 'eye'
+//   - n:          number - baseline trials behind the cutoffs (1-1000)
+//   - limits:     map metric -> { worse: 'higher' | 'lower', limit: number }
+//   Readable by the team; written by the athlete it describes or the coach.
+//
 // Queries: athletes list trials where subjectUid == their uid; the coach
-// lists all of the team's trials; team members list members.
+// lists all of the team's trials; team members list members and ranges.
 //
 // ===============================================================
 
@@ -128,16 +135,55 @@ service cloud.firestore {
       );
     }
 
-    // Client-created trials: only your own baseline.
-    function isValidOwnBaseline(d) {
-      return hasExactFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics']) &&
-        d.subjectUid == request.auth.uid &&
-        d.testerUid == request.auth.uid &&
-        d.kind == 'baseline' &&
+    // A trial's common fields, for create.
+    function isValidTrialBase(d) {
+      return d.testerUid == request.auth.uid &&
         d.test in ['balance', 'reaction', 'eye'] &&
         isValidDateString(d.at) &&
         isValidMetrics(d.test, d.metrics);
     }
+
+    // Your own baseline.
+    function isValidOwnBaseline(d) {
+      return hasExactFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics']) &&
+        d.subjectUid == request.auth.uid &&
+        d.kind == 'baseline' &&
+        isValidTrialBase(d);
+    }
+
+    // A post-hit check on any athlete on the team.
+    function isValidCheck(teamId, d) {
+      return hasExactFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics', 'status']) &&
+        d.kind == 'check' &&
+        d.status in ['normal', 'monitor', 'refer', 'no-baseline'] &&
+        d.subjectUid is string &&
+        exists(/databases/$(database)/documents/teams/$(teamId)/members/$(d.subjectUid)) &&
+        isValidTrialBase(d);
+    }
+
+    function isValidLimit(l, key) {
+      return !(key in l) || (
+        l[key] is map && hasExactFields(l[key], ['worse', 'limit']) &&
+        l[key].worse in ['higher', 'lower'] &&
+        l[key].limit is number && l[key].limit >= -1000000 && l[key].limit <= 1000000
+      );
+    }
+
+    function isValidRanges(rangeId, d) {
+      return hasExactFields(d, ['subjectUid', 'test', 'n', 'limits']) &&
+        d.test in ['balance', 'reaction', 'eye'] &&
+        d.subjectUid is string && rangeId == d.subjectUid + '_' + d.test &&
+        d.n is int && d.n >= 1 && d.n <= 1000 &&
+        d.limits is map &&
+        d.limits.keys().hasOnly(['sway', 'singleSway', 'errors', 'medianMs', 'spreadMs',
+          'mistakes', 'onTarget', 'gain', 'saccadeRate', 'lagMs']) &&
+        isValidLimit(d.limits, 'sway') && isValidLimit(d.limits, 'singleSway') &&
+        isValidLimit(d.limits, 'errors') && isValidLimit(d.limits, 'medianMs') &&
+        isValidLimit(d.limits, 'spreadMs') && isValidLimit(d.limits, 'mistakes') &&
+        isValidLimit(d.limits, 'onTarget') && isValidLimit(d.limits, 'gain') &&
+        isValidLimit(d.limits, 'saccadeRate') && isValidLimit(d.limits, 'lagMs');
+    }
+
 
     // ===============================================================
     // Rules
@@ -214,11 +260,26 @@ service cloud.firestore {
         // Only the athlete it belongs to, and the coach.
         allow read: if isCoach(teamId) ||
           (isAuthenticated() && resource.data.subjectUid == request.auth.uid);
-        // Athletes record their own baselines. Checks come from the server.
-        allow create: if isMember(teamId) && isValidOwnBaseline(request.resource.data);
+        // Athletes record their own baselines; anyone on the team (or the
+        // coach) can record a check on a teammate.
+        allow create: if (isMember(teamId) && isValidOwnBaseline(request.resource.data)) ||
+          ((isMember(teamId) || isCoach(teamId)) && isValidCheck(teamId, request.resource.data));
         allow update: if false;
         allow delete: if isCoach(teamId) ||
           (isAuthenticated() && resource.data.subjectUid == request.auth.uid);
+      }
+
+      match /ranges/{rangeId} {
+        allow read: if isCoach(teamId) || isMember(teamId);
+        // The athlete publishes their own; the coach may update any (after
+        // deleting a baseline).
+        allow create, update: if isValidRanges(rangeId, request.resource.data) && (
+          (isMember(teamId) && request.resource.data.subjectUid == request.auth.uid) ||
+          (isCoach(teamId) &&
+            exists(/databases/$(database)/documents/teams/$(teamId)/members/$(request.resource.data.subjectUid)))
+        ) && (resource == null || resource.data.subjectUid == request.resource.data.subjectUid);
+        allow delete: if isCoach(teamId) ||
+          (isMember(teamId) && resource.data.subjectUid == request.auth.uid);
       }
     }
 

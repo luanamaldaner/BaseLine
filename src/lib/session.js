@@ -1,13 +1,21 @@
 // Live state for the signed-in user: profile, team, roster, and the results
 // they're allowed to see (their own as an athlete, the whole team as coach).
 // Pages read it synchronously through useSession(); writes go to Firestore.
+//
+// Checks on teammates: an athlete's app publishes only their baseline
+// cutoffs (teams/{teamId}/ranges/{uid}_{test}), never their results. A
+// tester's phone judges a check against those cutoffs, so it can show the
+// call without being able to read the teammate's data.
 
 import { useSyncExternalStore } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
   collection, doc, getDoc, onSnapshot, query, where, writeBatch, deleteDoc, setDoc, updateDoc,
 } from 'firebase/firestore';
-import { auth, db, recordCheckFn } from './firebase.js';
+import { auth, db } from './firebase.js';
+import {
+  SPECS, TEST_IDS, ACTIONS, summarize, compareToSummary, limitsFrom, judge,
+} from '../../shared/assess.js';
 
 const empty = () => ({
   authChecked: false,
@@ -17,6 +25,7 @@ const empty = () => ({
   members: new Map(), // uid -> { uid, name, joinedAt }
   trials: new Map(), // id -> trial
   trialsReady: false,
+  ranges: new Map(), // `${uid}_${test}` -> { subjectUid, test, n, limits }
   error: null,
 });
 
@@ -63,12 +72,19 @@ function startTeam(teamId, uid, role) {
       role === 'coach'
         ? collection(db, 'teams', teamId, 'trials')
         : query(collection(db, 'teams', teamId, 'trials'), where('subjectUid', '==', uid)),
-      (snap) => set({
-        trials: new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }])),
-        trialsReady: true,
-      }),
+      (snap) => {
+        set({
+          trials: new Map(snap.docs.map((d) => [d.id, { id: d.id, ...d.data() }])),
+          trialsReady: true,
+        });
+        // Keep my published cutoffs in step with my baselines.
+        if (role === 'athlete' && !snap.metadata.fromCache) syncRanges(uid);
+      },
       fail,
     ),
+    onSnapshot(collection(db, 'teams', teamId, 'ranges'), (snap) => {
+      set({ ranges: new Map(snap.docs.map((d) => [d.id, d.data()])) });
+    }, fail),
   );
 }
 
@@ -90,7 +106,7 @@ onAuthStateChanged(auth, (user) => {
         if (key) startTeam(profile.teamId, user.uid, profile.role);
         else {
           stopTeam();
-          set({ team: null, members: new Map(), trials: new Map(), trialsReady: false });
+          set({ team: null, members: new Map(), trials: new Map(), trialsReady: false, ranges: new Map() });
         }
       }
     },
@@ -170,21 +186,57 @@ export function removeMember(memberUid) {
 const clean = (metrics) =>
   Object.fromEntries(Object.entries(metrics).map(([k, v]) => [k, Number.isFinite(v) ? v : null]));
 
-// Your own baseline. Written directly (works offline, syncs later).
-export function saveBaseline(test, metrics) {
+const baselinesOf = (subjectUid, test) =>
+  [...state.trials.values()].filter((t) => t.subjectUid === subjectUid && t.test === test && t.kind === 'baseline');
+
+const sameLimits = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+
+// Publish (or remove) a subject's cutoffs from the baselines this device can
+// see. Athletes do it for themselves; the coach after deleting a baseline.
+export function syncRanges(subjectUid) {
+  const teamId = state.profile?.teamId;
+  if (!teamId) return;
+  for (const test of TEST_IDS) {
+    const id = `${subjectUid}_${test}`;
+    const lim = limitsFrom(summarize(baselinesOf(subjectUid, test)), SPECS[test]);
+    const current = state.ranges.get(id);
+    const ref = doc(db, 'teams', teamId, 'ranges', id);
+    if (!lim) {
+      if (current) deleteDoc(ref).catch(() => {});
+    } else if (!current || current.n !== lim.n || !sameLimits(current.limits, lim.limits)) {
+      setDoc(ref, { subjectUid, test, ...lim }).catch((e) => set({ error: `Saving cutoffs failed: ${e.message}` }));
+    }
+  }
+}
+
+function addTrialDoc(trial) {
   const ref = doc(collection(db, 'teams', state.profile.teamId, 'trials'));
-  const trial = { subjectUid: uid(), testerUid: uid(), test, kind: 'baseline', at: now(), metrics: clean(metrics) };
   setDoc(ref, trial).catch((e) => set({ error: `Saving failed: ${e.message}` }));
   return { id: ref.id, ...trial };
 }
 
-// A post-hit check on anyone on the team (including yourself). The server
-// compares it to their baseline and returns the call.
-export async function submitCheck(subjectUid, test, metrics) {
-  const res = await recordCheckFn({ teamId: state.profile.teamId, subjectUid, test, metrics: clean(metrics) });
-  return res.data;
+// Your own baseline. Works offline; syncs later.
+export function saveBaseline(test, metrics) {
+  return addTrialDoc({ subjectUid: uid(), testerUid: uid(), test, kind: 'baseline', at: now(), metrics: clean(metrics) });
 }
 
-export function deleteTrial(id) {
-  return deleteDoc(doc(db, 'teams', state.profile.teamId, 'trials', id));
+// A post-hit check on anyone on the team (including yourself), judged on this
+// device against the subject's published cutoffs. Works offline.
+// Returns the call; plus the full comparison when the viewer may see data.
+export async function submitCheck(subjectUid, test, metrics) {
+  const m = clean(metrics);
+  const status = judge(state.ranges.get(`${subjectUid}_${test}`), m);
+  addTrialDoc({ subjectUid, testerUid: uid(), test, kind: 'check', at: now(), metrics: m, status });
+  const canSeeData = subjectUid === uid() || state.profile.role === 'coach';
+  const comparison = canSeeData
+    ? compareToSummary(summarize(baselinesOf(subjectUid, test)), m, SPECS[test])
+    : undefined;
+  return { status, ...ACTIONS[status], comparison };
+}
+
+export async function deleteTrial(id) {
+  const trial = state.trials.get(id);
+  await deleteDoc(doc(db, 'teams', state.profile.teamId, 'trials', id));
+  // A removed baseline changes the cutoffs teammates judge against.
+  if (trial?.kind === 'baseline') syncRanges(trial.subjectUid);
 }

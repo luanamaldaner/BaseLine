@@ -32,6 +32,7 @@ export function ActionCard({ result, subjectName }) {
 //   self:      full results; save as a baseline or a post-hit check
 //   coach:     full results; submit a post-hit check
 //   teammate:  no numbers; submit a post-hit check and get only the call
+//              (judged against the teammate's published cutoffs)
 // `children` (graphs etc.) are shown only to people allowed to see the data.
 export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics, spec, onDiscard, children }) {
   const [busy, setBusy] = useState(false);
@@ -47,11 +48,7 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
       const result = await submitCheck(subject.uid, test, metrics);
       setSaved({ kind: 'check', result });
     } catch (e) {
-      setError(
-        e?.code === 'functions/unavailable' || e?.code === 'functions/internal' || !navigator.onLine
-          ? 'Couldn’t reach the server. Post-hit checks need an internet connection; try again.'
-          : e?.message || 'Something went wrong. Try again.',
-      );
+      setError(e?.message || 'Something went wrong. Try again.');
     } finally {
       setBusy(false);
     }

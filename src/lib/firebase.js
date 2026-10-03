@@ -9,7 +9,6 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore';
-import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // Web app config comes from .env.local (not committed; see .env.example).
 // Access to data is controlled by Firebase Auth + firestore.rules.
@@ -34,10 +33,7 @@ export const auth = initializeAuth(app, {
   persistence: [indexedDBLocalPersistence, browserLocalPersistence],
 });
 
-// Offline cache: baselines keep saving on bad Wi-Fi and sync when it's back.
+// Offline cache: results keep saving on bad Wi-Fi and sync when it's back.
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
-
-const functions = getFunctions(app, 'us-east1');
-export const recordCheckFn = httpsCallable(functions, 'recordCheck');

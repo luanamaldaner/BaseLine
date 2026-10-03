@@ -1,5 +1,5 @@
-// Baseline comparison shared by the web app and the Cloud Function, so a
-// result is judged the same way everywhere. Plain JS, no imports.
+// Baseline comparison used everywhere in the app (own results, the coach's
+// view, and checks on teammates), so a result is judged the same way.
 //
 // SPECS: for each test, each metric's bad direction and (optionally) the
 // smallest spread to assume when an athlete's baseline barely varies.
@@ -77,6 +77,36 @@ export function compareToSummary(summary, metrics, spec) {
   const flags = rows.filter((r) => r.flagged).length;
   const status = flags === 0 ? 'normal' : flags === 1 ? 'monitor' : 'refer';
   return { status, flags, baselineTrials: summary.n, rows };
+}
+
+// Cutoffs a teammate's phone needs to judge a check without seeing any
+// results: for each metric, the value past which it counts as flagged
+// (mean ± 2 spreads, on the "worse" side). Same verdicts as compareToSummary.
+export function limitsFrom(summary, spec) {
+  if (!summary) return null;
+  const limits = {};
+  for (const [name, def] of Object.entries(spec)) {
+    const s = summary.stats[name];
+    if (!s || def.worse === 'away') continue;
+    const spread = spreadFor(s, def);
+    limits[name] = {
+      worse: def.worse,
+      limit: def.worse === 'lower' ? s.mean - FLAG_Z * spread : s.mean + FLAG_Z * spread,
+    };
+  }
+  return { n: summary.n, limits };
+}
+
+// Status of a check from cutoffs alone.
+export function judge(limitsDoc, metrics) {
+  if (!limitsDoc || !limitsDoc.n) return 'no-baseline';
+  let flags = 0;
+  for (const [name, { worse, limit }] of Object.entries(limitsDoc.limits)) {
+    const v = metrics[name];
+    if (!Number.isFinite(v)) continue;
+    if (worse === 'lower' ? v < limit : v > limit) flags++;
+  }
+  return flags === 0 ? 'normal' : flags === 1 ? 'monitor' : 'refer';
 }
 
 // What a tester is told to do, by status. No numbers: safe to show anyone.
