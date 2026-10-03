@@ -10,7 +10,7 @@
 import { useSyncExternalStore } from 'react';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
-  collection, doc, getDoc, onSnapshot, query, where, writeBatch, deleteDoc, setDoc, updateDoc,
+  collection, doc, getDoc, onSnapshot, query, where, writeBatch, deleteDoc, setDoc, updateDoc, getDocFromServer,
 } from 'firebase/firestore';
 import { auth, db } from './firebase.js';
 import {
@@ -104,17 +104,20 @@ function startTeam(teamId, uid, role) {
 
 let profileRetry = null;
 
-// Live connection to the signed-in user's profile. If it drops (network,
-// token refresh), stay on the loading screen with the error and reconnect,
-// rather than showing "coach or athlete?" as if the profile were missing.
+// Live connection to the signed-in user's profile.
+//
+// "No profile" (which sends someone through onboarding) is only believed when
+// the SERVER says so. An empty offline cache, a slow connection, or a blocked
+// stream says nothing about the account, so those stay on the loading screen
+// with a message and keep asking, instead of treating a set-up account as new.
 function watchProfile(user) {
   unsubs.profile?.();
   clearTimeout(profileRetry);
+  const ref = doc(db, 'users', user.uid);
   let teamKey = null;
-  let heardFromServer = false;
-  let cacheFallback = null;
+  let serverAnswered = false;
+
   const apply = (d) => {
-    clearTimeout(cacheFallback);
     const profile = d.exists() ? d.data() : null;
     set({ profile, error: null });
     const key = profile?.teamId ? `${profile.teamId}:${profile.role}` : null;
@@ -127,25 +130,31 @@ function watchProfile(user) {
       }
     }
   };
+
+  // Ask the server directly until it answers.
+  const askServer = () => {
+    if (serverAnswered || auth.currentUser?.uid !== user.uid) return;
+    getDocFromServer(ref).then(
+      (d) => {
+        serverAnswered = true;
+        apply(d);
+      },
+      () => {
+        set({ error: 'Can’t reach the server. Check your connection; trying again…' });
+        profileRetry = setTimeout(askServer, 4000);
+      },
+    );
+  };
+
   unsubs.profile = onSnapshot(
-    doc(db, 'users', user.uid),
+    ref,
     { includeMetadataChanges: true },
     (d) => {
-      if (!d.metadata.fromCache) heardFromServer = true;
-      // The offline cache can be empty or stale right after login. Only
-      // trust it on its own if it has a complete profile (with a team);
-      // otherwise wait for the server, so nobody is sent back through
-      // onboarding. Fall back to the cache after a few seconds offline.
-      const complete = d.exists() && !!d.data().teamId;
-      if (!heardFromServer && !complete) {
-        clearTimeout(cacheFallback);
-        cacheFallback = setTimeout(() => apply(d), 6000);
-        return;
-      }
-      apply(d);
+      if (!d.metadata.fromCache) serverAnswered = true;
+      if (d.exists() || serverAnswered) apply(d); // a profile anywhere is a profile
+      else askServer();
     },
     (e) => {
-      clearTimeout(cacheFallback);
       console.error('Profile connection failed', e);
       set({ error: `Can’t load your account (${e.code ?? e.message}). Retrying…` });
       profileRetry = setTimeout(() => {
@@ -188,8 +197,21 @@ export function recordConsent() {
 }
 
 export async function createProfile(role, name) {
+  const ref = doc(db, 'users', uid());
+  // Never overwrite a profile that already exists: a stale screen can show
+  // onboarding to an account that is already set up.
+  let existing;
+  try {
+    existing = await withTimeout(getDocFromServer(ref));
+  } catch {
+    throw new Error('Can’t reach the server. Check your connection and try again.');
+  }
+  if (existing.exists()) {
+    watchProfile(auth.currentUser);
+    return;
+  }
   const data = { role, name: name.trim().slice(0, 60), teamId: null };
-  await withTimeout(setDoc(doc(db, 'users', uid()), data));
+  await withTimeout(setDoc(ref, data));
   // Don't depend on the live connection to move on.
   if (!state.profile) set({ profile: data });
   watchProfile(auth.currentUser);
