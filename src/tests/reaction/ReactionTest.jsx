@@ -4,7 +4,9 @@ import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx'
 
 const TEST = 'reaction';
 
-export default function ReactionTest({ subject, isSelf, canSeeData }) {
+// Guided mode (the Run-all flow): no header, intro, or results of its own.
+// It starts when `startSignal` changes and reports through `onFinished`.
+export default function ReactionTest({ subject, isSelf, canSeeData, guided = false, startSignal = 0, onFinished }) {
   const padRef = useRef(null);
   const textRef = useRef(null);
   const run = useRef(null); // mutable state of the running test
@@ -30,7 +32,14 @@ export default function ReactionTest({ subject, isSelf, canSeeData }) {
 
   useEffect(() => () => clearTimers(), []);
 
+  useEffect(() => {
+    if (guided && startSignal > 0) start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSignal]);
+
   function start() {
+    // A second tap before the first render would restart the test mid-trial.
+    if (run.current && run.current.state !== 'done') return;
     clearTimers();
     run.current = {
       index: 0, // includes practice trials
@@ -118,12 +127,14 @@ export default function ReactionTest({ subject, isSelf, canSeeData }) {
     const res = computeReaction(r.times, r.falseStarts, r.lapses);
     setResult(res);
     setPhase('results');
+    if (guided) onFinished?.(res);
   }
 
   function abort() {
     clearTimers();
     run.current = null;
     setPhase('intro');
+    if (guided) onFinished?.({ ok: false, aborted: true });
   }
 
   // Space / Enter also respond (laptop). Esc stops the test.
@@ -142,13 +153,15 @@ export default function ReactionTest({ subject, isSelf, canSeeData }) {
 
   return (
     <section className="test">
-      <header className="test-head">
-        <h2>Reaction time</h2>
-        <p className="muted">
-          Tap as soon as the box turns green. {REACTION.practice} practice taps, then{' '}
-          {REACTION.trials} scored ones. About a minute.
-        </p>
-      </header>
+      {!guided && (
+        <header className="test-head">
+          <h2>Reaction time</h2>
+          <p className="muted">
+            Tap as soon as the box turns green. {REACTION.practice} practice taps, then{' '}
+            {REACTION.trials} scored ones. About a minute.
+          </p>
+        </header>
+      )}
 
       {phase === 'running' ? (
         <>
@@ -169,7 +182,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData }) {
           </div>
           <p className="muted small">Tap the box, or press Space on a keyboard.</p>
         </>
-      ) : (
+      ) : guided ? null : (
         <div className="panel reaction-intro">
           <ul className="tips">
             <li>Use the same device every time; phones and laptops give different times.</li>
@@ -185,7 +198,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData }) {
         </div>
       )}
 
-      {phase === 'results' && result && (
+      {!guided && phase === 'results' && result && (
         <div className="results">
           {!result.ok ? (
             <div className="callout danger">Test didn't work: {result.reason} Run it again.</div>

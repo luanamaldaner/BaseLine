@@ -18,6 +18,16 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
 
   return (
     <section className="overview">
+      <div className="flow-cta">
+        <button className="primary big-btn" onClick={() => onOpenTest('all')}>
+          Run all three tests
+        </button>
+        <span className="muted small">
+          Reaction, then eyes, then balance, one after the other. About four minutes, spoken
+          instructions, one save at the end.
+        </span>
+      </div>
+
       <OverallBanner overall={overall} rows={rows} baselineDone={baselineDone} isSelf={isSelf} />
 
       <div className="test-grid">

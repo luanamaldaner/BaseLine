@@ -1,4 +1,5 @@
 import { TESTS, testById } from '../tests/registry.js';
+import Flow from './Flow.jsx';
 
 // Pick who to test, then which test, then run it.
 // people: [{ uid, name }] the viewer may test. selfUid: the viewer if they're
@@ -33,6 +34,29 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
 
   const isSelf = subject.uid === selfUid;
 
+  // All three objective tests, one after the other, with spoken instructions.
+  if (pick.testId === 'all') {
+    return (
+      <section className="run">
+        <div className="row run-crumbs">
+          <button className="ghost small-btn" onClick={() => setPick({ ...pick, testId: null })}>
+            ← Change test
+          </button>
+          <span className="muted small">
+            Testing <b>{isSelf ? 'yourself' : subject.name}</b>
+          </span>
+        </div>
+        <Flow
+          key={subject.uid}
+          subject={subject}
+          isSelf={isSelf}
+          canSeeData={isSelf || isCoach}
+          onDone={() => setPick({ ...pick, testId: null })}
+        />
+      </section>
+    );
+  }
+
   if (!test) {
     return (
       <section className="run">
@@ -41,6 +65,11 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
         </button>
         <h2>{isSelf ? 'Test yourself' : `Test ${subject.name}`}</h2>
         <div className="test-pick">
+          <button className="test-option all" onClick={() => setPick({ ...pick, testId: 'all' })}>
+            <b>All three, one after the other</b>
+            <span className="muted small">Reaction, then eyes, then balance. Spoken instructions, one save at the end.</span>
+            <span className="muted small">4 min · Phone</span>
+          </button>
           {TESTS.map((t) => (
             <button key={t.id} className="test-option" onClick={() => setPick({ ...pick, testId: t.id })}>
               <b>{t.label}</b>

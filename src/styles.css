@@ -356,3 +356,36 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
 .code { font-size: 2.2rem; font-weight: 800; letter-spacing: 0.25em; font-variant-numeric: tabular-nums; }
 .teammates { margin: 0; padding-left: 1.1rem; columns: 2 160px; }
 .trial.member { grid-template-columns: 1fr auto; }
+
+/* Run-all flow: big type, one instruction per screen, calm colours */
+.flow { display: grid; gap: 1rem; max-width: 680px; }
+.flow h2 { margin: 0; font-size: 1.6rem; }
+.flow-head { display: grid; gap: 0.15rem; }
+.flow-steps { padding-left: 1.4rem; font-size: 1.15rem; display: grid; gap: 0.35rem; }
+.flow-ready { display: grid; gap: 1rem; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.25rem; }
+.flow-instr { margin: 0; padding-left: 1.5rem; font-size: 1.35rem; line-height: 1.4; display: grid; gap: 0.6rem; }
+.flow-examiner { margin: 0; font-size: 0.95rem; color: var(--muted); border-top: 1px solid var(--border); padding-top: 0.75rem; }
+.flow-running-bar { margin: 0; justify-content: flex-end; }
+.flow-cta { display: grid; gap: 0.4rem; justify-items: start; }
+.flow-result h3 { margin: 1rem 0 0.5rem; }
+.test-option.all { border-color: var(--accent); grid-column: 1 / -1; }
+
+/* While the test is mounted behind the ready screen (camera warming up), keep
+   its live panel small and out of the way. */
+.flow-warm { opacity: 0.85; }
+.flow-warm .eye-layout { grid-template-columns: 1fr; max-width: 420px; }
+.flow-warm .camera { aspect-ratio: 4 / 3; }
+
+/* Reaction pad in the flow: the same states, less saturated. A concussed
+   athlete is often light-sensitive, and the default red/green is a flash. */
+.flow .reaction-pad[data-state='wait'] { background: #7a2e28; }
+.flow .reaction-pad[data-state='go'] { background: #1f6b4a; }
+.flow .reaction-pad[data-state='bad'] { background: #7a4a1f; }
+.flow .reaction-pad[data-state='shown'] { background: #3a4150; }
+
+/* 3-2-1 on the eye-test stage, above the dot so it never covers it */
+.stage-count {
+  position: absolute; top: 14%; left: 0; right: 0; text-align: center;
+  font-size: 6rem; font-weight: 800; line-height: 1; color: #fff;
+  font-variant-numeric: tabular-nums;
+}

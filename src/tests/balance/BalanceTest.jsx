@@ -2,35 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { STANCES, BALANCE, METRICS, computeBalance } from './balance.js';
 import { formatMetric } from '../../components/ResultCards.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
+import { beep, say, buzz, unlockAudio } from '../../lib/cues.js';
 
 const TEST = 'balance';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-// --- audio + speech cues (eyes are closed, so the screen can't be the cue) ---
-let audioCtx = null;
-function beep(freq = 880, ms = 180) {
-  try {
-    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc.frequency.value = freq;
-    gain.gain.value = 0.2;
-    osc.connect(gain).connect(audioCtx.destination);
-    osc.start();
-    osc.stop(audioCtx.currentTime + ms / 1000);
-  } catch {
-    /* no audio: the screen still shows the timer */
-  }
-}
-function say(text) {
-  try {
-    speechSynthesis.cancel();
-    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
-  } catch {
-    /* speech unsupported */
-  }
-}
-const buzz = (ms) => navigator.vibrate?.(ms);
 
 async function requestMotionPermission() {
   // iOS needs an explicit permission prompt from a tap.
@@ -41,7 +16,11 @@ async function requestMotionPermission() {
   }
 }
 
-export default function BalanceTest({ subject, isSelf, canSeeData }) {
+// Guided mode (the Run-all flow): no header, intro, or results of its own.
+// `startSignal` triggers begin() (it must follow a tap, for the iOS motion
+// permission prompt); the stance screens run as usual; `onFinished` gets
+// the outcome.
+export default function BalanceTest({ subject, isSelf, canSeeData, guided = false, startSignal = 0, onFinished }) {
   const sinkRef = useRef(null);
   const pendingRef = useRef(null); // samples of the stance just finished
   const abortRef = useRef(false);
@@ -72,15 +51,25 @@ export default function BalanceTest({ subject, isSelf, canSeeData }) {
     };
   }, []);
 
+  const activeRef = useRef(false); // begin() in flight or a run under way
+
+  useEffect(() => {
+    if (guided && startSignal > 0) begin();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSignal]);
+
   async function begin() {
+    if (activeRef.current) return;
+    activeRef.current = true;
     setError(null);
     try {
       await requestMotionPermission();
     } catch (e) {
+      activeRef.current = false;
       setError(e.message);
       return;
     }
-    beep(660, 1); // unlocks audio on mobile while we still have the tap
+    unlockAudio(); // while we still have the tap
     try {
       wakeRef.current = await navigator.wakeLock?.request('screen');
     } catch {
@@ -90,6 +79,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData }) {
     const t = performance.now();
     await sleep(1200);
     if (lastEventRef.current < t) {
+      activeRef.current = false;
       setError(
         'No motion sensor found. Open this page on a phone (run "npm run dev:phone" and use the https:// address it prints).',
       );
@@ -156,36 +146,42 @@ export default function BalanceTest({ subject, isSelf, canSeeData }) {
   }
 
   function finish() {
+    activeRef.current = false;
     wakeRef.current?.release?.().catch(() => {});
     const r = computeBalance(dataRef.current);
     setResult(r);
     setRunId((n) => n + 1);
     setPhase('results');
+    if (guided) onFinished?.(r);
   }
 
   function stop() {
+    activeRef.current = false;
     abortRef.current = true;
     sinkRef.current = null;
     speechSynthesis?.cancel?.();
     wakeRef.current?.release?.().catch(() => {});
     setPhase('intro');
+    if (guided) onFinished?.({ ok: false, aborted: true });
   }
 
   const stance = STANCES[stanceIdx];
 
   return (
     <section className="test">
-      <header className="test-head">
-        <h2>Balance</h2>
-        <p className="muted">
-          Three stances, 20 seconds each, eyes closed, phone held flat against the chest. The
-          phone measures sway; an examiner watches and counts errors.
-        </p>
-      </header>
+      {!guided && (
+        <header className="test-head">
+          <h2>Balance</h2>
+          <p className="muted">
+            Three stances, 20 seconds each, eyes closed, phone held flat against the chest. The
+            phone measures sway; an examiner watches and counts errors.
+          </p>
+        </header>
+      )}
 
       {error && <div className="callout danger">{error}</div>}
 
-      {phase === 'intro' && (
+      {phase === 'intro' && !guided && (
         <div className="panel balance-intro">
           <ol className="tips">
             <li>Shoes off, firm floor. The athlete holds the phone flat against their chest with both hands.</li>
@@ -250,7 +246,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData }) {
         </div>
       )}
 
-      {phase === 'results' && result && (
+      {!guided && phase === 'results' && result && (
         <div className="results">
           {!result.ok ? (
             <div className="callout danger">Test didn't work: {result.reason} Run it again.</div>

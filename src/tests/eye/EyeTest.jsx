@@ -5,11 +5,15 @@ import {
 } from './pursuit.js';
 import TracePlot from './TracePlot.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
+import { say, hush } from '../../lib/cues.js';
 
 const TEST = 'eye';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export default function EyeTest({ subject, isSelf, canSeeData }) {
+// Guided mode (the Run-all flow): no header, intro, or results of its own.
+// The camera warms up on mount; the sweep starts when `startSignal` changes
+// and the outcome goes to `onFinished`.
+export default function EyeTest({ subject, isSelf, canSeeData, guided = false, startSignal = 0, onFinished }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
   const dotRef = useRef(null);
@@ -21,6 +25,8 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
   const [error, setError] = useState(null);
   const [phase, setPhaseState] = useState('preview'); // preview | calibrate | pursuit | results
   const [stageText, setStageText] = useState('');
+  const [stageCount, setStageCount] = useState(null); // 3, 2, 1 before each part
+  const runningRef = useRef(false); // runTest in flight
   const [live, setLive] = useState(null);
   const [result, setResult] = useState(null);
   const [runId, setRunId] = useState(0); // fresh save buttons per run
@@ -86,6 +92,11 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (guided && startSignal > 0 && status === 'ready') runTest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startSignal, status]);
+
   // Esc aborts a running test.
   useEffect(() => {
     const onKey = (e) => {
@@ -103,7 +114,26 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
     if (abortRef.current) throw new Error('aborted');
   };
 
+  // Spoken instruction, then a 3-2-1 on screen. The athlete may be young or
+  // concussed, and the first calibration dot used to appear the instant the
+  // overlay did, before they had settled: those samples were junk.
+  async function walkThrough(text) {
+    setStageText(text);
+    say(text);
+    await sleep(2200);
+    checkAbort();
+    for (let n = 3; n > 0; n--) {
+      setStageCount(n);
+      await sleep(1000);
+      checkAbort();
+    }
+    setStageCount(null);
+  }
+
   async function runTest() {
+    // A second tap before the first render would run two tests over each other.
+    if (runningRef.current) return;
+    runningRef.current = true;
     abortRef.current = false;
     setResult(null);
     setRunId((n) => n + 1);
@@ -113,10 +143,12 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
       /* fullscreen is nice-to-have */
     }
     setPhase('calibrate');
-    setStageText('Keep your head still. Look at each dot until it moves.');
+    setStageText('');
     await sleep(50);
 
     try {
+      await walkThrough('Keep your head still. A dot will appear. Look right at it, and when it jumps, look at the new spot.');
+      setStageText('Look at the dot.');
       // 1. Calibration: map eye ratio -> screen position.
       const calibPoints = [];
       for (const x of CALIBRATION.points) {
@@ -136,11 +168,11 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
 
       // 2. Pursuit: follow the moving dot.
       setPhase('pursuit');
-      setStageText('Follow the dot with your eyes only. Keep your head still.');
       moveDot(0.5);
+      await walkThrough('Now the dot will move. Follow it with your eyes only. Keep your head still.');
+      setStageText('');
       await sleep(PURSUIT.holdMs);
       checkAbort();
-      setStageText('');
 
       const samples = [];
       const t0 = performance.now();
@@ -161,15 +193,21 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
       // Compare against the baseline as it stands, before this trial is saved.
       setResult({ ...r, calib });
       setPhase('results');
+      if (guided) onFinished?.({ ...r, calib });
     } catch (e) {
       sinkRef.current = null;
       if (e.message === 'aborted') {
         setPhase('preview');
+        if (guided) onFinished?.({ ok: false, aborted: true });
       } else {
         setResult({ ok: false, reason: e.message });
         setPhase('results');
+        if (guided) onFinished?.({ ok: false, reason: e.message });
       }
     } finally {
+      runningRef.current = false;
+      setStageCount(null);
+      hush();
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     }
   }
@@ -179,13 +217,15 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
 
   return (
     <section className="test">
-      <header className="test-head">
-        <h2>Eye pursuit</h2>
-        <p className="muted">
-          Follow a moving dot with your eyes. The camera tracks your irises to measure how
-          smoothly they keep up.
-        </p>
-      </header>
+      {!guided && (
+        <header className="test-head">
+          <h2>Eye pursuit</h2>
+          <p className="muted">
+            Follow a moving dot with your eyes. The camera tracks your irises to measure how
+            smoothly they keep up.
+          </p>
+        </header>
+      )}
 
       {status === 'error' && (
         <div className="callout danger">
@@ -207,6 +247,7 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
         <div className="panel">
           <h3>Setup check</h3>
           <LiveSignal live={live} />
+          {guided ? null : (<>
           <ul className="tips">
             <li>Sit ~50 cm (arm's length) from the screen, face well lit.</li>
             <li>Remove glasses if you can.</li>
@@ -219,17 +260,19 @@ export default function EyeTest({ subject, isSelf, canSeeData }) {
             </button>
           </div>
           {phase !== 'results' && canSeeData && <BaselineProgress subjectUid={subject.uid} test={TEST} />}
+          </>)}
         </div>
       </div>
 
       {testing && (
         <div className="stage">
           <div ref={dotRef} className={`dot ${phase === 'calibrate' ? 'pulse' : ''}`} />
+          {stageCount !== null && <div className="stage-count">{stageCount}</div>}
           {stageText && <div className="stage-text">{stageText}</div>}
         </div>
       )}
 
-      {phase === 'results' && result && (
+      {!guided && phase === 'results' && result && (
         <div className="results">
           {!result.ok ? (
             <div className="callout danger">
