@@ -7,6 +7,7 @@ import { download } from './History.jsx';
 import Avatar from '../components/Avatar.jsx';
 import QrCode from '../components/QrCode.jsx';
 import { inviteUrl } from '../lib/invite.js';
+import { AlertsPanel } from '../components/Alerts.jsx';
 import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
 
 const RANK = { refer: 0, monitor: 1, normal: 2, none: 3 };
@@ -28,8 +29,7 @@ function greeting() {
 
 // Coach home: a way straight into a check, team numbers, and everyone on the
 // team with flagged players first.
-export function Roster({ members, coachName, newFlags = [], onOpen, onRunCheck }) {
-  const newFor = new Set(newFlags.map((t) => t.subjectUid));
+export function Roster({ members, coachName, onOpen, onRunCheck, alerts, names, onOpenPlayer }) {
   const rows = members
     .map((m) => ({ ...m, ...playerSummary(m.uid) }))
     .sort((a, b) => RANK[a.overall] - RANK[b.overall] || a.name.localeCompare(b.name));
@@ -43,6 +43,12 @@ export function Roster({ members, coachName, newFlags = [], onOpen, onRunCheck }
 
   return (
     <section className="home-grid">
+      {alerts && (
+        <AlertsPanel
+          unread={alerts.unread} names={names} onOpen={onOpenPlayer}
+          onDismiss={alerts.dismiss} onDismissAll={alerts.dismissAll}
+        />
+      )}
       <div className="hero">
         <p className="eyebrow">{greeting()}{coachName ? `, ${coachName.split(' ')[0]}` : ''}</p>
         <h1>Someone took a hit?</h1>
@@ -51,18 +57,6 @@ export function Roster({ members, coachName, newFlags = [], onOpen, onRunCheck }
           Run a check <ArrowIcon size={20} />
         </button>
       </div>
-
-      {newFlags.length > 0 && (
-        <div className="status-banner bad new-flags" role="status">
-          <b>
-            {newFlags.length} new flagged result{newFlags.length === 1 ? '' : 's'} since you last looked
-          </b>
-          <span>
-            {[...newFor].map((uid) => members.find((m) => m.uid === uid)?.name).filter(Boolean).join(', ')}.
-            Tap a player marked <b>New</b> to see what happened.
-          </span>
-        </div>
-      )}
 
       <div className="stats" aria-label="Team summary">
         {stats.map(({ label, value, Icon, tone }) => (
@@ -98,7 +92,6 @@ export function Roster({ members, coachName, newFlags = [], onOpen, onRunCheck }
                         {r.lastCheck ? `Checked ${formatWhen(r.lastCheck)}` : 'No checks yet'}
                       </span>
                     </span>
-                    {newFor.has(r.uid) && <span className="chip new">New</span>}
                     <Ring done={r.baselinesDone} total={TESTS.length} />
                     <span className={`chip ${st?.cls ?? 'muted'}`}>{st ? st.short : 'No checks'}</span>
                   </button>

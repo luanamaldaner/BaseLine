@@ -1,3 +1,4 @@
+import { useRef, useState } from 'react';
 import { TESTS, RESULT_TESTS } from '../tests/registry.js';
 import { getTrials, summarizeBaseline, usualRange, BASELINE_TRIALS } from '../lib/baseline.js';
 import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } from '../lib/status.js';
@@ -113,7 +114,6 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
         })}
       </div>
 
-      <Guide />
     </section>
   );
 }
@@ -149,60 +149,149 @@ function OverallBanner({ overall, rows, baselineDone, isSelf }) {
   );
 }
 
+// Tips for getting a clean result, per test (shown in the guide tabs).
+const HOW_TO = {
+  balance: [
+    'Shoes off, on a firm floor, phone held flat against the chest with both hands.',
+    'Turn the volume up and Silent mode off: the beep and voice are the only cues with eyes closed.',
+    'Someone stands right next to the athlete and counts errors after each stance.',
+  ],
+  reaction: [
+    'Sit down and use the same device every time: phones and laptops give different times.',
+    'Dominant hand, held the same way each time.',
+    'Tapping before the box turns green counts as a mistake.',
+  ],
+  eye: [
+    'Face a window or lamp, about an arm’s length from a laptop or 30 cm from a phone.',
+    'Glasses off if possible. Keep the head still and move only the eyes.',
+    'Phone and laptop each keep their own baseline, so compare like with like.',
+  ],
+};
+
+// Reference info at the bottom of the dashboard, as tabs: one per test, plus
+// how the tests fit together and how the overall call is made.
 export function Guide() {
+  const tabs = [
+    ...TESTS.map((t) => ({ id: t.id, label: t.label, test: t })),
+    { id: 'together', label: 'How they fit together' },
+    { id: 'call', label: 'How the call works' },
+  ];
+  const [active, setActive] = useState(tabs[0].id);
+  const refs = useRef({});
+
+  // Arrow keys move between tabs (the standard tabs keyboard pattern).
+  const onKey = (e) => {
+    const i = tabs.findIndex((t) => t.id === active);
+    const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    const next = tabs[(to + tabs.length) % tabs.length].id;
+    setActive(next);
+    refs.current[next]?.focus();
+  };
+
+  const tab = tabs.find((t) => t.id === active);
+
   return (
-    <div className="guide">
-      <h2>What each test is for</h2>
-      <div className="table-scroll">
-        <table className="guide-table">
-          <thead>
-            <tr>
-              <th>Test</th>
-              <th>What it checks</th>
-              <th>Best at catching</th>
-              <th>Watch out for</th>
-            </tr>
-          </thead>
-          <tbody>
-            {TESTS.map((t) => (
-              <tr key={t.id}>
-                <td>
-                  <b>{t.label}</b>
-                  <div className="muted small">{t.time} · {t.device}</div>
-                </td>
-                <td>{t.system}</td>
-                <td>{t.bestAt}</td>
-                <td>{t.limits}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <section className="guide">
+      <h2>Learn more</h2>
+      <p className="muted guide-intro">What each test measures, how to get a clean result, and how the overall call is made.</p>
+      <div className="info-tabs" role="tablist" aria-label="About the tests" onKeyDown={onKey}>
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            ref={(el) => { refs.current[t.id] = el; }}
+            role="tab"
+            id={`guide-tab-${t.id}`}
+            aria-selected={active === t.id}
+            aria-controls={`guide-panel-${t.id}`}
+            tabIndex={active === t.id ? 0 : -1}
+            className={active === t.id ? 'active' : ''}
+            onClick={() => setActive(t.id)}
+          >
+            {t.test && <TestBadge id={t.id} size={26} />}
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <h3>How they fit together</h3>
-      <ul className="guide-points">
-        <li>
-          <b>Concussion doesn't look the same in everyone.</b> One athlete mostly loses balance,
-          another mostly has eye-movement problems, another mostly slows down. Each test watches a
-          different system, so they won't always agree, and a normal result on one test never
-          clears an athlete by itself.
-        </li>
-        <li>
-          <b>All three are objective.</b> They measure what the body does, not what the athlete
-          says, so they still work when a player wants to stay in the game and plays down how they
-          feel.
-        </li>
-        <li>
-          <b>They recover on different clocks.</b> Balance often returns to normal within days;
-          thinking speed and eye movements can lag behind. That's why return-to-play needs every
-          test back in range, not just one.
-        </li>
-        <li>
-          <b>How the overall call works:</b> each test compares the athlete to their own baseline.
-          One test worse than usual means <i>Monitor</i>. Two tests worse, one clearly worse, or a
-          check with no baseline to compare against means <i>Remove from play and refer</i>.
-        </li>
+      <div className="info-panel" role="tabpanel" id={`guide-panel-${tab.id}`} aria-labelledby={`guide-tab-${tab.id}`}>
+        {tab.test ? <TestInfo test={tab.test} /> : tab.id === 'together' ? <Together /> : <HowTheCallWorks />}
+      </div>
+    </section>
+  );
+}
+
+function TestInfo({ test }) {
+  return (
+    <div className="info-grid">
+      <div className="info-head">
+        <TestBadge id={test.id} size={48} />
+        <div>
+          <h3>{test.label}</h3>
+          <p className="muted">{test.measures}</p>
+        </div>
+        <span className="tile-meta">{test.time} · {test.device}</span>
+      </div>
+      <div className="info-block">
+        <h4>What it checks</h4>
+        <p>{test.system}</p>
+      </div>
+      <div className="info-block">
+        <h4>Best at catching</h4>
+        <p>{test.bestAt}</p>
+      </div>
+      <div className="info-block">
+        <h4>Watch out for</h4>
+        <p>{test.limits}</p>
+      </div>
+      <div className="info-block">
+        <h4>Getting a clean result</h4>
+        <ul>{(HOW_TO[test.id] ?? []).map((t) => <li key={t}>{t}</li>)}</ul>
+      </div>
+    </div>
+  );
+}
+
+function Together() {
+  return (
+    <ul className="guide-points">
+      <li>
+        <b>Concussion doesn't look the same in everyone.</b> One athlete mostly loses balance,
+        another mostly has eye-movement problems, another mostly slows down. Each test watches a
+        different system, so they won't always agree, and a normal result on one test never
+        clears an athlete by itself.
+      </li>
+      <li>
+        <b>All three are objective.</b> They measure what the body does, not what the athlete
+        says, so they still work when a player wants to stay in the game and plays down how they
+        feel.
+      </li>
+      <li>
+        <b>They recover on different clocks.</b> Balance often returns to normal within days;
+        thinking speed and eye movements can lag behind. That's why return-to-play needs every
+        test back in range, not just one.
+      </li>
+    </ul>
+  );
+}
+
+function HowTheCallWorks() {
+  return (
+    <div className="info-grid">
+      <p>
+        Each test compares the athlete to <b>their own baseline</b>: {BASELINE_TRIALS} trials
+        recorded while healthy. A result counts as worse than usual when it falls well outside
+        their normal range.
+      </p>
+      <ul className="call-legend">
+        <li><span className="chip ok">Normal</span> Every test is within their usual range.</li>
+        <li><span className="chip warn">Monitor</span> One test is worse than usual. Keep them out of contact and retest.</li>
+        <li><span className="chip bad">Refer</span> Two tests worse, one clearly worse, or no baseline to compare against. Remove from play and have a clinician see them.</li>
       </ul>
+      <p className="muted small">
+        A screening tool, not a diagnosis. When in doubt, sit them out.
+      </p>
     </div>
   );
 }
