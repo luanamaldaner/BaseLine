@@ -68,7 +68,7 @@ src/tests/eye/               eye pursuit (working)
   pursuit.js                 dot motion, calibration fit, gain / lag / saccade metrics
   EyeTest.jsx, TracePlot.jsx UI + eye-vs-dot graph
 src/tests/balance/           TODO
-src/tests/reaction/          TODO
+src/tests/reaction/          reaction time (working)
 src/tests/symptoms/          TODO
 ```
 
