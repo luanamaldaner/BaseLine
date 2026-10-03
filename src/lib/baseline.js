@@ -1,8 +1,9 @@
 // Per-athlete trial storage + baseline comparison. Shared by every test.
 //
-// Storage: the browser's localStorage on this device, under one key. Nothing is
-// sent to a server, so each device keeps its own athletes; clearing browser
-// data erases them. exportCsv() is the backup / analysis path.
+// Storage: Firestore, under the signed-in account (users/{uid}/trials), via
+// the live in-memory copy in store.js. The same login sees the same data on
+// every device; the Firestore offline cache keeps saves working without
+// signal. exportCsv() is the backup / analysis path.
 //
 // A trial is { at, kind, metrics: { name: number } }, where kind is
 // 'baseline' (healthy, preseason) or 'check' (after a hit).
@@ -13,58 +14,40 @@
 // minSpread: smallest spread to assume, in metric units, for metrics whose
 // baseline is often flat (e.g. 0 symptoms every time).
 
-const KEY = 'baseline:v1';
-
-function load() {
-  try {
-    return JSON.parse(localStorage.getItem(KEY)) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function save(db) {
-  localStorage.setItem(KEY, JSON.stringify(db));
-}
+import { allTrialsRaw, putTrial, removeTrials } from './store.js';
 
 export function listAthletes() {
-  return Object.keys(load()).sort((a, b) => a.localeCompare(b));
+  return [...new Set(allTrialsRaw().map((t) => t.athlete))].sort((a, b) => a.localeCompare(b));
 }
 
 export function getTrials(athlete, test) {
-  return load()[athlete]?.[test] ?? [];
+  return allTrialsRaw()
+    .filter((t) => t.athlete === athlete && t.test === test)
+    .sort((a, b) => a.at.localeCompare(b.at));
 }
 
-// Every trial for an athlete, newest first: [{ test, at, kind, metrics }]
+// Every trial for an athlete, newest first: [{ id, test, at, kind, metrics }]
 export function allTrials(athlete) {
-  const tests = load()[athlete] ?? {};
-  return Object.entries(tests)
-    .flatMap(([test, trials]) => trials.map((t) => ({ test, ...t })))
+  return allTrialsRaw()
+    .filter((t) => t.athlete === athlete)
+    .map(({ id, test, at, kind, metrics }) => ({ id, test, at, kind, metrics }))
     .sort((a, b) => b.at.localeCompare(a.at));
 }
 
 export function addTrial(athlete, test, kind, metrics) {
-  const db = load();
-  db[athlete] ??= {};
-  db[athlete][test] ??= [];
-  const trial = { at: new Date().toISOString(), kind, metrics };
-  db[athlete][test].push(trial);
-  save(db);
-  return trial;
+  return putTrial({ athlete, test, kind, at: new Date().toISOString(), metrics });
 }
 
 export function deleteTrial(athlete, test, at) {
-  const db = load();
-  const trials = db[athlete]?.[test];
-  if (!trials) return;
-  db[athlete][test] = trials.filter((t) => t.at !== at);
-  save(db);
+  removeTrials(
+    allTrialsRaw()
+      .filter((t) => t.athlete === athlete && t.test === test && t.at === at)
+      .map((t) => t.id),
+  );
 }
 
 export function deleteAthlete(athlete) {
-  const db = load();
-  delete db[athlete];
-  save(db);
+  removeTrials(allTrialsRaw().filter((t) => t.athlete === athlete).map((t) => t.id));
 }
 
 function mean(xs) {
@@ -144,4 +127,40 @@ export function exportCsv(athletes = listAthletes()) {
     return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
   return [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\n');
+}
+
+// Results saved in this browser before accounts existed (localStorage).
+const LEGACY_KEY = 'baseline:v1';
+
+function legacyData() {
+  try {
+    return JSON.parse(localStorage.getItem(LEGACY_KEY)) ?? {};
+  } catch {
+    return {};
+  }
+}
+
+export function localDataCount() {
+  return Object.values(legacyData())
+    .flatMap((tests) => Object.values(tests))
+    .reduce((n, trials) => n + trials.length, 0);
+}
+
+// Copies the old on-device results into the signed-in account, then clears them.
+export function importLocalData() {
+  let n = 0;
+  for (const [athlete, tests] of Object.entries(legacyData())) {
+    for (const [test, trials] of Object.entries(tests)) {
+      for (const t of trials) {
+        putTrial({ athlete, test, kind: t.kind, at: t.at, metrics: t.metrics });
+        n++;
+      }
+    }
+  }
+  try {
+    localStorage.removeItem(LEGACY_KEY);
+  } catch {
+    /* ignore */
+  }
+  return n;
 }

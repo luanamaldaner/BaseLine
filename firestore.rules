@@ -1,0 +1,111 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users/{userId}/trials
+// Document ID: auto-generated
+// Owner: the signed-in user whose uid == {userId}. Nothing is shared
+// between users. Trials are immutable once written (no updates).
+// Fields (exactly these, all required):
+//   - athlete: string (1-100 chars) - athlete's display name
+//   - test:    string, one of 'symptoms' | 'balance' | 'reaction' | 'eye'
+//   - kind:    string, one of 'baseline' | 'check'
+//   - at:      string (<= 40 chars), ISO-8601 UTC time set by the client,
+//              e.g. 2026-10-03T14:05:12.345Z. Format-checked only; it is
+//              the time the test was taken, which may be earlier than the
+//              write when the device was offline.
+//   - metrics: map; keys depend on `test` (exact set below). Each value is
+//              a number in [-1e6, 1e6], or null for a measurement that
+//              could not be computed.
+//       symptoms: count, severity
+//       balance:  sway, singleSway, errors
+//       reaction: medianMs, spreadMs, mistakes
+//       eye:      onTarget, gain, saccadeRate, lagMs, trackingError
+//
+// Queries: the client listens to the whole users/{uid}/trials collection
+// (no where/orderBy/limit). Deletes are single or batched.
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasExactFields(data, fields) {
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
+    }
+
+    // ISO-8601 UTC string. Validates format only, not calendar logic.
+    function isValidDateString(s) {
+      return s is string && s.size() <= 40 &&
+        s.matches('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$');
+    }
+
+    // A metric value: bounded number, or null when it couldn't be measured.
+    function isMetric(m, key) {
+      let v = m.get(key, 0);
+      return v == null || (v is number && v >= -1000000 && v <= 1000000);
+    }
+
+    function hasMetrics(m, keys) {
+      return m is map && hasExactFields(m, keys);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidMetrics(test, m) {
+      return (test == 'symptoms' && hasMetrics(m, ['count', 'severity']) &&
+          isMetric(m, 'count') && isMetric(m, 'severity')) ||
+        (test == 'balance' && hasMetrics(m, ['sway', 'singleSway', 'errors']) &&
+          isMetric(m, 'sway') && isMetric(m, 'singleSway') && isMetric(m, 'errors')) ||
+        (test == 'reaction' && hasMetrics(m, ['medianMs', 'spreadMs', 'mistakes']) &&
+          isMetric(m, 'medianMs') && isMetric(m, 'spreadMs') && isMetric(m, 'mistakes')) ||
+        (test == 'eye' &&
+          hasMetrics(m, ['onTarget', 'gain', 'saccadeRate', 'lagMs', 'trackingError']) &&
+          isMetric(m, 'onTarget') && isMetric(m, 'gain') && isMetric(m, 'saccadeRate') &&
+          isMetric(m, 'lagMs') && isMetric(m, 'trackingError'))
+        ;
+    }
+
+    function isValidTrial(d) {
+      return hasExactFields(d, ['athlete', 'test', 'kind', 'at', 'metrics']) &&
+        d.athlete is string && d.athlete.size() >= 1 && d.athlete.size() <= 100 &&
+        d.test in ['symptoms', 'balance', 'reaction', 'eye'] &&
+        d.kind in ['baseline', 'check'] &&
+        isValidDateString(d.at) &&
+        isValidMetrics(d.test, d.metrics);
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId}/trials/{trialId} {
+      // Owner only: read their own trials (single doc or the collection).
+      allow read: if isOwner(userId);
+      // Owner only, and the document must match the schema exactly.
+      allow create: if isOwner(userId) && isValidTrial(request.resource.data);
+      // Trials are a record of a test that happened; they never change.
+      allow update: if false;
+      // Owner can remove their own results.
+      allow delete: if isOwner(userId);
+    }
+
+    // Everything else is denied by default.
+  }
+}

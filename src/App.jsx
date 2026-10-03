@@ -1,5 +1,9 @@
-import { useState } from 'react';
-import { listAthletes } from './lib/baseline.js';
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from './lib/firebase.js';
+import { startSync, stopSync, subscribe, getVersion, isReady } from './lib/store.js';
+import { listAthletes, localDataCount, importLocalData } from './lib/baseline.js';
+import AuthScreen from './pages/AuthScreen.jsx';
 import { TESTS } from './tests/registry.js';
 import Overview from './pages/Overview.jsx';
 import History from './pages/History.jsx';
@@ -11,11 +15,48 @@ const TABS = [
 ];
 
 export default function App() {
+  const [user, setUser] = useState(undefined); // undefined = still checking
+  const [syncError, setSyncError] = useState(null);
+
+  useEffect(
+    () =>
+      onAuthStateChanged(auth, (u) => {
+        setUser(u);
+        setSyncError(null);
+        if (u) startSync(u.uid, (e) => setSyncError(e.message));
+        else stopSync();
+      }),
+    [],
+  );
+
+  // Re-render whenever the synced data changes (this device or another).
+  useSyncExternalStore(subscribe, getVersion);
+
+  if (user === undefined) return <Splash text="Loading…" />;
+  if (!user) return <AuthScreen />;
+  if (!isReady()) return <Splash text="Loading your athletes…" />;
+  return <Workspace user={user} syncError={syncError} />;
+}
+
+function Splash({ text }) {
+  return (
+    <div className="gate">
+      <p className="muted">{text}</p>
+    </div>
+  );
+}
+
+function Workspace({ user, syncError }) {
   const [tab, setTab] = useState('overview');
   const [athlete, setAthlete] = useState('');
 
   if (!athlete) {
-    return <NameGate onContinue={(name) => { setAthlete(name); setTab('overview'); }} />;
+    return (
+      <NameGate
+        email={user.email}
+        onContinue={(name) => { setAthlete(name); setTab('overview'); }}
+      />
+    );
   }
 
   const test = TESTS.find((t) => t.id === tab);
@@ -37,6 +78,9 @@ export default function App() {
           </button>
         </div>
       </header>
+      {syncError && (
+        <div className="callout danger">Couldn’t reach the database: {syncError}</div>
+      )}
 
       <nav className="tabs">
         {TABS.map((t) => (
@@ -61,9 +105,11 @@ export default function App() {
   );
 }
 
-function NameGate({ onContinue }) {
+function NameGate({ email, onContinue }) {
   const [name, setName] = useState('');
+  const [imported, setImported] = useState(null);
   const known = listAthletes();
+  const localCount = imported === null ? localDataCount() : 0;
   const trimmed = name.trim();
 
   const submit = (e) => {
@@ -87,11 +133,22 @@ function NameGate({ onContinue }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Athlete name"
+          maxLength={100}
           aria-label="Athlete name"
         />
         <button className="primary" type="submit" disabled={!trimmed}>
           Continue
         </button>
+        {localCount > 0 && (
+          <div className="callout small">
+            {localCount} result{localCount === 1 ? '' : 's'} from before accounts are saved on this
+            device.{' '}
+            <button type="button" className="link" onClick={() => setImported(importLocalData())}>
+              Add them to this account
+            </button>
+          </div>
+        )}
+        {imported !== null && <p className="form-notice small">Added {imported} saved results.</p>}
         {known.length > 0 && (
           <div className="gate-known">
             <p className="muted small">Or pick a returning athlete:</p>
@@ -104,6 +161,10 @@ function NameGate({ onContinue }) {
             </div>
           </div>
         )}
+        <p className="muted small gate-account">
+          Signed in as {email} ·{' '}
+          <button type="button" className="link" onClick={() => signOut(auth)}>Log out</button>
+        </p>
       </form>
     </div>
   );

@@ -3,3 +3,5 @@ dist/
 public/mediapipe-wasm/
 .DS_Store
 *.local
+.firebase/
+firebase-debug.log

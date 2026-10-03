@@ -292,3 +292,10 @@ footer { margin-top: 2rem; text-align: center; }
   .trial { grid-template-columns: 1fr auto; }
   .trial-when { grid-column: 1 / -1; }
 }
+
+/* Auth */
+.form-error { color: var(--danger); font-size: 0.9rem; }
+.form-notice { color: var(--ok); font-size: 0.9rem; margin: 0; }
+.auth-links { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+button.link { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
+.gate-account { margin-top: 0.5rem !important; text-align: center; }
