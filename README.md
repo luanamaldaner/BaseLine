@@ -50,6 +50,37 @@
 - Local storage for baselines; no backend.
 - Our work is the measurement layer: iris-position signal, calibration (simple regression from a few fixation points), pursuit and sway metrics, baseline comparison.
 
+## Running it
+```bash
+npm install          # also copies MediaPipe's wasm into public/
+npm run dev          # http://localhost:5173 (laptop webcam)
+npm run dev:phone    # HTTPS on your LAN, for testing sensors/camera on a phone
+```
+The face model ships in `public/models/`, so the app works offline.
+
+## Code layout
+```
+src/lib/baseline.js          per-athlete trials, baseline mean/SD, z-score comparison
+src/components/ResultsTable  shared metric table + Normal / Monitor / Refer status
+src/tests/eye/               eye pursuit (working)
+  faceTracker.js             webcam -> MediaPipe -> iris position within each eye
+  pursuit.js                 dot motion, calibration fit, gain / lag / saccade metrics
+  EyeTest.jsx, TracePlot.jsx UI + eye-vs-dot graph
+src/tests/balance/           TODO
+src/tests/reaction/          TODO
+src/tests/symptoms/          TODO
+```
+
+## Adding a test
+1. Build the UI in `src/tests/<name>/`. Produce one flat object of numbers per trial, e.g. `{ medianMs: 284, iqrMs: 41 }`.
+2. Export a spec saying which direction is worse:
+   `{ medianMs: { label: 'Median RT', unit: 'ms', worse: 'higher', digits: 0 } }`
+   (`worse` is `'higher'`, `'lower'`, or `'away'` for any change from baseline).
+3. Save with `addTrial(athlete, '<name>', 'baseline' | 'check', metrics)`.
+4. For a check, call `compare(athlete, '<name>', metrics, spec)` **before** saving it, and render `<ResultsTable metrics spec comparison />`.
+
+See `src/tests/eye/EyeTest.jsx` for the full pattern.
+
 ## Positioning
 A **screening tool, not a diagnosis**: it tells a coach without a trainer when to pull an athlete and get them seen.
 

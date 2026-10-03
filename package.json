@@ -1,0 +1,23 @@
+{
+  "name": "baseline",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:phone": "vite --host --mode phone",
+    "build": "vite build",
+    "preview": "vite preview",
+    "postinstall": "node scripts/copy-wasm.mjs"
+  },
+  "dependencies": {
+    "@mediapipe/tasks-vision": "^1.0.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.2"
+  }
+}
