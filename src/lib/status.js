@@ -11,18 +11,20 @@ export const STATUS = {
 
 // Latest post-hit check for one test, judged against the baselines that
 // existed when it was taken.
-export function latestCheck(athlete, test) {
-  const checks = getTrials(athlete, test.id).filter((t) => t.kind === 'check');
+export function latestCheck(subjectUid, test) {
+  const checks = getTrials(subjectUid, test.id).filter((t) => t.kind === 'check');
   if (!checks.length) return null;
   const trial = checks.reduce((a, b) => (a.at > b.at ? a : b));
-  return { trial, comparison: compare(athlete, test.id, trial.metrics, test.metrics, trial.at) };
+  return { trial, comparison: compare(subjectUid, test.id, trial.metrics, trial.at) };
 }
 
 // Overall: any test at "refer", or two or more tests at "monitor", means
-// refer; a single "monitor" means monitor. Tests agree only partly (they
-// measure different systems), so one flag is enough to keep watching.
+// refer; a single "monitor" means monitor. A check with no baseline to
+// compare against counts as "refer", matching what the tester was told.
 export function overallStatus(checks) {
-  const statuses = checks.filter(Boolean).map((c) => c.comparison.status).filter((s) => s !== 'no-baseline');
+  const statuses = checks.filter(Boolean).map((c) =>
+    c.comparison.status === 'no-baseline' ? 'refer' : c.comparison.status,
+  );
   if (!statuses.length) return null;
   const monitors = statuses.filter((s) => s === 'monitor').length;
   if (statuses.includes('refer') || monitors >= 2) return 'refer';

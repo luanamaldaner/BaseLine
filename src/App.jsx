@@ -1,41 +1,47 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { auth } from './lib/firebase.js';
-import { startSync, stopSync, subscribe, getVersion, isReady } from './lib/store.js';
-import { listAthletes, localDataCount, importLocalData } from './lib/baseline.js';
+import { useState } from 'react';
+import { useSession, logOut } from './lib/session.js';
 import AuthScreen from './pages/AuthScreen.jsx';
-import { TESTS } from './tests/registry.js';
+import { ProfileSetup, TeamSetup } from './pages/Setup.jsx';
 import Overview from './pages/Overview.jsx';
 import History from './pages/History.jsx';
+import RunTest from './pages/RunTest.jsx';
+import { Roster, CoachTeam, AthleteTeam } from './pages/Team.jsx';
 
-const TABS = [
-  { id: 'overview', label: 'Overview' },
-  ...TESTS.map((t) => ({ id: t.id, label: t.label })),
-  { id: 'history', label: 'History' },
-];
+// UI state that should survive a reload (phones reload tabs in the background).
+function usePersisted(key, initial) {
+  const [value, setValue] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? JSON.parse(raw) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  const set = (v) => {
+    setValue(v);
+    try {
+      sessionStorage.setItem(key, JSON.stringify(v));
+    } catch {
+      /* private mode */
+    }
+  };
+  return [value, set];
+}
 
 export default function App() {
-  const [user, setUser] = useState(undefined); // undefined = still checking
-  const [syncError, setSyncError] = useState(null);
+  const s = useSession();
+  const email = s.user?.email;
 
-  useEffect(
-    () =>
-      onAuthStateChanged(auth, (u) => {
-        setUser(u);
-        setSyncError(null);
-        if (u) startSync(u.uid, (e) => setSyncError(e.message));
-        else stopSync();
-      }),
-    [],
-  );
-
-  // Re-render whenever the synced data changes (this device or another).
-  useSyncExternalStore(subscribe, getVersion);
-
-  if (user === undefined) return <Splash text="Loading…" />;
-  if (!user) return <AuthScreen />;
-  if (!isReady()) return <Splash text="Loading your athletes…" />;
-  return <Workspace user={user} syncError={syncError} />;
+  if (!s.authChecked) return <Splash text="Loading…" />;
+  if (!s.user) return <AuthScreen />;
+  if (s.profile === undefined) return <Splash text="Loading your account…" />;
+  if (!s.profile) return <ProfileSetup email={email} />;
+  if (!s.profile.teamId) return <TeamSetup role={s.profile.role} email={email} />;
+  if (s.team === undefined || !s.trialsReady) return <Splash text="Loading your team…" />;
+  if (s.team === null) {
+    return <TeamSetup role={s.profile.role} email={email} notice="That team no longer exists." />;
+  }
+  return s.profile.role === 'coach' ? <CoachApp s={s} /> : <AthleteApp s={s} />;
 }
 
 function Splash({ text }) {
@@ -46,57 +52,38 @@ function Splash({ text }) {
   );
 }
 
-function Workspace({ user, syncError }) {
-  const [tab, setTab] = useState('overview');
-  const [athlete, setAthlete] = useState('');
+// uid -> name for everyone this user can see (for "run by" labels).
+function nameMap(s) {
+  const names = new Map([...s.members.values()].map((m) => [m.uid, m.name]));
+  names.set(s.team.coachUid, s.team.coachName);
+  names.set(s.user.uid, s.profile.name);
+  return names;
+}
 
-  if (!athlete) {
-    return (
-      <NameGate
-        email={user.email}
-        onContinue={(name) => { setAthlete(name); setTab('overview'); }}
-      />
-    );
-  }
-
-  const test = TESTS.find((t) => t.id === tab);
-  let page;
-  if (tab === 'overview') page = <Overview athlete={athlete} onOpenTest={setTab} />;
-  else if (tab === 'history') page = <History athlete={athlete} onAthleteDeleted={() => setAthlete('')} />;
-  else page = <test.Component athlete={athlete} />;
-
+function Frame({ s, tabs, tab, setTab, children }) {
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
           <span className="logo" aria-hidden>◎</span> Baseline
+          <span className="team-name muted">{s.team.name}</span>
         </div>
         <div className="athlete">
-          Testing <b>{athlete}</b>
-          <button className="ghost small-btn" onClick={() => setAthlete('')}>
-            Switch athlete
-          </button>
+          <span>
+            <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
+          </span>
+          <button className="ghost small-btn" onClick={logOut}>Log out</button>
         </div>
       </header>
-      {syncError && (
-        <div className="callout danger">Couldn’t reach the database: {syncError}</div>
-      )}
-
       <nav className="tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={t.id === tab ? 'active' : ''}
-            onClick={() => setTab(t.id)}
-          >
-            {t.label}
+        {tabs.map(([id, label]) => (
+          <button key={id} className={id === tab ? 'active' : ''} onClick={() => setTab(id)}>
+            {label}
           </button>
         ))}
       </nav>
-
-      {/* key: remount per athlete and tab so pages always read fresh data */}
-      <main key={`${athlete}:${tab}`}>{page}</main>
-
+      {s.error && <div className="callout danger">{s.error}</div>}
+      <main>{children}</main>
       <footer className="muted small">
         Screening tool, not a diagnosis. Any athlete with a suspected concussion should be
         removed from play and evaluated by a clinician.
@@ -105,67 +92,82 @@ function Workspace({ user, syncError }) {
   );
 }
 
-function NameGate({ email, onContinue }) {
-  const [name, setName] = useState('');
-  const [imported, setImported] = useState(null);
-  const known = listAthletes();
-  const localCount = imported === null ? localDataCount() : 0;
-  const trimmed = name.trim();
-
-  const submit = (e) => {
-    e.preventDefault();
-    if (trimmed) onContinue(trimmed);
+function AthleteApp({ s }) {
+  const me = s.user.uid;
+  const [tab, setTab] = usePersisted('tab:athlete', 'me');
+  const [pick, setPick] = usePersisted('pick:athlete', { subjectUid: null, testId: null });
+  const members = [...s.members.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const people = [{ uid: me, name: s.profile.name }, ...members.filter((m) => m.uid !== me)];
+  const openTest = (testId) => {
+    setPick({ subjectUid: me, testId });
+    setTab('test');
   };
 
   return (
-    <div className="gate">
-      <form className="gate-card" onSubmit={submit}>
-        <div className="brand gate-brand">
-          <span className="logo" aria-hidden>◎</span> Baseline
-        </div>
-        <h1>Who's being tested?</h1>
-        <p className="muted">
-          Enter the athlete's name. Results are saved under it and compared to their own
-          baseline.
-        </p>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Athlete name"
-          maxLength={100}
-          aria-label="Athlete name"
-        />
-        <button className="primary" type="submit" disabled={!trimmed}>
-          Continue
-        </button>
-        {localCount > 0 && (
-          <div className="callout small">
-            {localCount} result{localCount === 1 ? '' : 's'} from before accounts are saved on this
-            device.{' '}
-            <button type="button" className="link" onClick={() => setImported(importLocalData())}>
-              Add them to this account
-            </button>
-          </div>
-        )}
-        {imported !== null && <p className="form-notice small">Added {imported} saved results.</p>}
-        {known.length > 0 && (
-          <div className="gate-known">
-            <p className="muted small">Or pick a returning athlete:</p>
-            <div className="chips">
-              {known.map((a) => (
-                <button type="button" key={a} onClick={() => onContinue(a)}>
-                  {a}
+    <Frame
+      s={s}
+      tab={tab}
+      setTab={(t) => { if (t === 'test') setPick({ subjectUid: null, testId: null }); setTab(t); }}
+      tabs={[['me', 'My dashboard'], ['test', 'Run a test'], ['history', 'My history'], ['team', 'Team']]}
+    >
+      {tab === 'me' && <Overview subjectUid={me} isSelf onOpenTest={openTest} />}
+      {tab === 'test' && <RunTest people={people} selfUid={me} isCoach={false} pick={pick} setPick={setPick} />}
+      {tab === 'history' && <History subjectUid={me} subjectName={s.profile.name} isSelf names={nameMap(s)} />}
+      {tab === 'team' && <AthleteTeam team={s.team} members={members} />}
+    </Frame>
+  );
+}
+
+function CoachApp({ s }) {
+  const [tab, setTab] = usePersisted('tab:coach', 'roster');
+  const [player, setPlayer] = usePersisted('player:coach', null);
+  const [playerTab, setPlayerTab] = usePersisted('playerTab:coach', 'dashboard');
+  const [pick, setPick] = usePersisted('pick:coach', { subjectUid: null, testId: null });
+  const members = [...s.members.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const names = nameMap(s);
+  const selected = members.find((m) => m.uid === player);
+
+  const openTestFor = (uid, testId) => {
+    setPick({ subjectUid: uid, testId });
+    setTab('test');
+  };
+
+  return (
+    <Frame
+      s={s}
+      tab={tab}
+      setTab={(t) => {
+        if (t === 'roster') setPlayer(null);
+        if (t === 'test') setPick({ subjectUid: null, testId: null });
+        setTab(t);
+      }}
+      tabs={[['roster', 'Roster'], ['test', 'Run a check'], ['team', 'Team']]}
+    >
+      {tab === 'roster' && !selected && (
+        <Roster members={members} onOpen={(uid) => { setPlayer(uid); setPlayerTab('dashboard'); }} />
+      )}
+      {tab === 'roster' && selected && (
+        <section>
+          <div className="row player-head">
+            <button className="ghost small-btn" onClick={() => setPlayer(null)}>← Roster</button>
+            <h2 className="grow">{selected.name}</h2>
+            <div className="seg">
+              {[['dashboard', 'Dashboard'], ['history', 'History']].map(([id, label]) => (
+                <button key={id} className={playerTab === id ? 'on' : ''} onClick={() => setPlayerTab(id)}>
+                  {label}
                 </button>
               ))}
             </div>
           </div>
-        )}
-        <p className="muted small gate-account">
-          Signed in as {email} ·{' '}
-          <button type="button" className="link" onClick={() => signOut(auth)}>Log out</button>
-        </p>
-      </form>
-    </div>
+          {playerTab === 'dashboard' ? (
+            <Overview subjectUid={selected.uid} isSelf={false} onOpenTest={(testId) => openTestFor(selected.uid, testId)} />
+          ) : (
+            <History subjectUid={selected.uid} subjectName={selected.name} isSelf={false} names={names} />
+          )}
+        </section>
+      )}
+      {tab === 'test' && <RunTest people={members} selfUid={null} isCoach pick={pick} setPick={setPick} />}
+      {tab === 'team' && <CoachTeam team={s.team} members={members} names={names} />}
+    </Frame>
   );
 }

@@ -3,15 +3,13 @@ import { createLandmarker, openCamera, startTracking, EYES } from './faceTracker
 import {
   PURSUIT, CALIBRATION, METRICS, targetX, fitCalibration, frameIssue, computePursuit,
 } from './pursuit.js';
-import { compare, summarizeBaseline } from '../../lib/baseline.js';
 import TracePlot from './TracePlot.jsx';
-import ResultCards from '../../components/ResultCards.jsx';
-import SaveTrial, { BaselineProgress, NoBaselineNote } from '../../components/SaveTrial.jsx';
+import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 
 const TEST = 'eye';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export default function EyeTest({ athlete }) {
+export default function EyeTest({ subject, isSelf, canSeeData }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
   const dotRef = useRef(null);
@@ -161,10 +159,7 @@ export default function EyeTest({ athlete }) {
 
       const r = computePursuit(samples, calib);
       // Compare against the baseline as it stands, before this trial is saved.
-      const comparison = r.ok && summarizeBaseline(athlete, TEST)
-        ? compare(athlete, TEST, r.metrics, METRICS)
-        : null;
-      setResult({ ...r, calib, comparison });
+      setResult({ ...r, calib });
       setPhase('results');
     } catch (e) {
       sinkRef.current = null;
@@ -223,7 +218,7 @@ export default function EyeTest({ athlete }) {
               {phase === 'results' ? 'Run again' : 'Start test'}
             </button>
           </div>
-          {phase !== 'results' && <BaselineProgress athlete={athlete} test={TEST} />}
+          {phase !== 'results' && canSeeData && <BaselineProgress subjectUid={subject.uid} test={TEST} />}
         </div>
       </div>
 
@@ -249,10 +244,16 @@ export default function EyeTest({ athlete }) {
                 </div>
               )}
 
-              {!result.comparison && <NoBaselineNote athlete={athlete} />}
-
-              <ResultCards metrics={result.metrics} spec={METRICS} comparison={result.comparison} />
-
+              <ResultPanel
+                key={runId}
+                subject={subject}
+                isSelf={isSelf}
+                canSeeData={canSeeData}
+                test={TEST}
+                metrics={result.metrics}
+                spec={METRICS}
+                onDiscard={() => { setResult(null); setPhase('preview'); }}
+              >
               <div className="plot-wrap">
                 <h3>Eyes vs. dot</h3>
                 <p className="muted small">
@@ -262,14 +263,7 @@ export default function EyeTest({ athlete }) {
                 </p>
                 <TracePlot trace={result.trace} />
               </div>
-
-              <SaveTrial
-                key={runId}
-                athlete={athlete}
-                test={TEST}
-                metrics={result.metrics}
-                onDiscard={() => { setResult(null); setPhase('preview'); }}
-              />
+              </ResultPanel>
               <p className="muted small">
                 Calibration fit {(result.calib.r2 * 100).toFixed(0)}% · usable frames{' '}
                 {(result.validFraction * 100).toFixed(0)}%

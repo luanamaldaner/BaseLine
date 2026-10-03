@@ -64,10 +64,10 @@ export default function AuthScreen() {
         <h1>{title}</h1>
         <p className="muted">
           {mode === 'signup'
-            ? 'One account per coach or trainer. Your athletes and results are private to it and sync across your devices.'
+            ? 'Coaches and athletes both sign up here. Next you’ll choose which you are.'
             : mode === 'reset'
               ? 'Enter your email and we’ll send a reset link.'
-              : 'Your athletes and results sync across every device you log in on.'}
+              : 'Log in to your team. Your results sync across every device you use.'}
         </p>
         <input
           type="email"

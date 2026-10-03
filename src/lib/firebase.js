@@ -1,10 +1,15 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  initializeAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+} from 'firebase/auth';
 import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
 } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 // Web app config comes from .env.local (not committed; see .env.example).
 // Access to data is controlled by Firebase Auth + firestore.rules.
@@ -22,9 +27,17 @@ if (!firebaseConfig.apiKey) {
 }
 
 export const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
 
-// Offline cache: tests keep saving on bad Wi-Fi and sync when it's back.
+// Stay signed in across reloads and app switches: IndexedDB first, falling
+// back to localStorage where IndexedDB is unavailable.
+export const auth = initializeAuth(app, {
+  persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+});
+
+// Offline cache: baselines keep saving on bad Wi-Fi and sync when it's back.
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
+
+const functions = getFunctions(app, 'us-east1');
+export const recordCheckFn = httpsCallable(functions, 'recordCheck');

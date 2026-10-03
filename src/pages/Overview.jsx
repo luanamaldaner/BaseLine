@@ -1,27 +1,30 @@
 import { TESTS } from '../tests/registry.js';
-import { getTrials, summarizeBaseline, usualRange } from '../lib/baseline.js';
+import { getTrials, summarizeBaseline, usualRange, BASELINE_TRIALS } from '../lib/baseline.js';
 import { STATUS, latestCheck, overallStatus, formatWhen } from '../lib/status.js';
-import { BASELINE_TRIALS } from '../components/SaveTrial.jsx';
 import { formatMetric } from '../components/ResultCards.jsx';
 import Trend from '../components/Trend.jsx';
 
-export default function Overview({ athlete, onOpenTest }) {
-  const rows = TESTS.map((test) => {
-    const trials = getTrials(athlete, test.id);
-    const baseN = summarizeBaseline(athlete, test.id)?.n ?? 0;
-    return { test, trials, baseN, check: latestCheck(athlete, test) };
-  });
+// One athlete's dashboard. Seen by the athlete themselves and by the coach.
+// isSelf: the viewer is this athlete (so buttons say "Record baseline").
+export default function Overview({ subjectUid, isSelf, onOpenTest }) {
+  const rows = TESTS.map((test) => ({
+    test,
+    trials: getTrials(subjectUid, test.id),
+    baseN: summarizeBaseline(subjectUid, test.id)?.n ?? 0,
+    check: latestCheck(subjectUid, test),
+  }));
   const overall = overallStatus(rows.map((r) => r.check));
   const baselineDone = rows.filter((r) => r.baseN >= BASELINE_TRIALS).length;
 
   return (
     <section className="overview">
-      <OverallBanner overall={overall} rows={rows} baselineDone={baselineDone} />
+      <OverallBanner overall={overall} rows={rows} baselineDone={baselineDone} isSelf={isSelf} />
 
       <div className="test-grid">
         {rows.map(({ test, trials, baseN, check }) => {
           const def = test.metrics[test.headline];
           const status = check && STATUS[check.comparison.status];
+          const needsBaseline = baseN < BASELINE_TRIALS;
           return (
             <article className="test-card" key={test.id}>
               <header>
@@ -34,7 +37,7 @@ export default function Overview({ athlete, onOpenTest }) {
                   <dt>Baseline</dt>
                   <dd>
                     {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS}
-                    {baseN >= BASELINE_TRIALS ? ' ✓' : ''}
+                    {needsBaseline ? '' : ' ✓'}
                   </dd>
                 </div>
                 <div>
@@ -55,11 +58,13 @@ export default function Overview({ athlete, onOpenTest }) {
                 trials={trials}
                 metric={test.headline}
                 def={def}
-                band={usualRange(athlete, test.id, test.headline, def)}
+                band={usualRange(subjectUid, test.id, test.headline)}
               />
-              <button onClick={() => onOpenTest(test.id)}>
-                {baseN < BASELINE_TRIALS ? 'Record baseline' : 'Run a check'}
-              </button>
+              {onOpenTest && (
+                <button onClick={() => onOpenTest(test.id)}>
+                  {isSelf && needsBaseline ? 'Record baseline' : 'Run a check'}
+                </button>
+              )}
             </article>
           );
         })}
@@ -70,7 +75,7 @@ export default function Overview({ athlete, onOpenTest }) {
   );
 }
 
-function OverallBanner({ overall, rows, baselineDone }) {
+function OverallBanner({ overall, rows, baselineDone, isSelf }) {
   if (overall) {
     const s = STATUS[overall];
     const dates = rows.filter((r) => r.check).map((r) => r.check.trial.at).sort();
@@ -92,15 +97,16 @@ function OverallBanner({ overall, rows, baselineDone }) {
     <div className="status-banner muted">
       <b>No post-hit checks yet</b>
       <span>
-        Baselines complete for {baselineDone} of {TESTS.length} tests. Record {BASELINE_TRIALS}{' '}
-        baseline trials per test while healthy; after a hit, run each test as a check and the
-        overall result appears here.
+        Baselines complete for {baselineDone} of {TESTS.length} tests.{' '}
+        {isSelf
+          ? `Record ${BASELINE_TRIALS} baseline trials of each test while you're healthy. After a hit, anyone on the team can run a check on you.`
+          : `Athletes record ${BASELINE_TRIALS} baseline trials of each test themselves while healthy. After a hit, run checks and the overall call appears here.`}
       </span>
     </div>
   );
 }
 
-function Guide() {
+export function Guide() {
   return (
     <div className="guide">
       <h2>What each test is for</h2>
@@ -139,8 +145,9 @@ function Guide() {
           clears an athlete by itself.
         </li>
         <li>
-          <b>Symptoms are fast but subjective; the other three are objective.</b> If an athlete
-          says they feel fine but their balance or eye tracking is off, trust the measurement.
+          <b>All three are objective.</b> They measure what the body does, not what the athlete
+          says, so they still work when a player wants to stay in the game and plays down how they
+          feel.
         </li>
         <li>
           <b>They recover on different clocks.</b> Balance often returns to normal within days;
@@ -149,13 +156,8 @@ function Guide() {
         </li>
         <li>
           <b>How the overall call works:</b> each test compares the athlete to their own baseline.
-          One test worse than usual means <i>Monitor</i>. Two tests worse, or one clearly worse,
-          means <i>Remove from play and refer</i>.
-        </li>
-        <li>
-          <b>Next step for the data:</b> with baselines and checks from many athletes, the CSV
-          export (History tab) lets us measure how strongly the tests agree with each other and
-          which combination catches the most.
+          One test worse than usual means <i>Monitor</i>. Two tests worse, one clearly worse, or a
+          check with no baseline to compare against means <i>Remove from play and refer</i>.
         </li>
       </ul>
     </div>

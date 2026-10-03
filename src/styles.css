@@ -299,3 +299,60 @@ footer { margin-top: 2rem; text-align: center; }
 .auth-links { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
 button.link { background: none; border: none; padding: 0; color: var(--accent); cursor: pointer; font: inherit; text-decoration: underline; }
 .gate-account { margin-top: 0.5rem !important; text-align: center; }
+
+/* Setup */
+.setup-form { display: grid; gap: 0.75rem; }
+.role-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.role-card { display: grid; gap: 0.25rem; text-align: left; padding: 0.9rem; border-radius: 12px; }
+.role-card b { font-size: 1.05rem; }
+.role-card.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent) inset; }
+.code-input { font-size: 1.4rem !important; letter-spacing: 0.3em; text-align: center; font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) { .role-pick { grid-template-columns: 1fr; } }
+
+/* Header */
+.team-name { font-weight: 500; font-size: 0.95rem; margin-left: 0.5rem; }
+.grow { flex: 1; margin: 0; }
+.danger-text { color: var(--danger); }
+
+/* Run a test */
+.run h2 { margin: 0.5rem 0 1rem; }
+.people { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.5rem; }
+.person { display: grid; gap: 0.15rem; text-align: left; padding: 0.9rem 1rem; border-radius: 12px; }
+.test-pick { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.6rem; }
+.test-option { display: grid; gap: 0.3rem; text-align: left; padding: 1rem; border-radius: 12px; }
+.test-option b { font-size: 1.05rem; }
+.run-crumbs { justify-content: space-between; margin: 0 0 0.75rem; }
+
+/* Result panel */
+.result-panel { display: grid; gap: 0.75rem; }
+.action-card {
+  display: grid; gap: 0.25rem; padding: 1.25rem; border-radius: 16px;
+  border: 2px solid currentColor; background: var(--surface);
+}
+.action-card b { font-size: 1.6rem; }
+.action-card p { margin: 0; color: var(--text); font-size: 1.05rem; }
+
+/* Coach */
+.roster-list { display: grid; gap: 0.4rem; }
+.roster-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: 'name chip' 'meta chip';
+  gap: 0.1rem 0.75rem; align-items: center; text-align: left; padding: 0.75rem 1rem; border-radius: 12px;
+}
+.roster-row.bad { border-color: var(--danger); }
+.roster-row.warn { border-color: var(--warn); }
+.roster-name { grid-area: name; font-weight: 600; color: var(--text); }
+.roster-meta { grid-area: meta; }
+.roster-row .chip { grid-area: chip; }
+.player-head { margin: 0 0 1rem; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; padding: 0.35rem 0.8rem; }
+.seg button.on { background: var(--accent); color: #fff; }
+.team-page { display: grid; gap: 0.75rem; max-width: 640px; }
+.team-page h2, .team-page h3 { margin: 0; }
+.code-card {
+  display: grid; justify-items: start; gap: 0.35rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem;
+}
+.code { font-size: 2.2rem; font-weight: 800; letter-spacing: 0.25em; font-variant-numeric: tabular-nums; }
+.teammates { margin: 0; padding-left: 1.1rem; columns: 2 160px; }
+.trial.member { grid-template-columns: 1fr auto; }

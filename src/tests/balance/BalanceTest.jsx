@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { STANCES, BALANCE, METRICS, computeBalance } from './balance.js';
-import { compare, summarizeBaseline } from '../../lib/baseline.js';
-import ResultCards, { formatMetric } from '../../components/ResultCards.jsx';
-import SaveTrial, { BaselineProgress, NoBaselineNote } from '../../components/SaveTrial.jsx';
+import { formatMetric } from '../../components/ResultCards.jsx';
+import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 
 const TEST = 'balance';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -42,7 +41,7 @@ async function requestMotionPermission() {
   }
 }
 
-export default function BalanceTest({ athlete }) {
+export default function BalanceTest({ subject, isSelf, canSeeData }) {
   const sinkRef = useRef(null);
   const pendingRef = useRef(null); // samples of the stance just finished
   const abortRef = useRef(false);
@@ -159,10 +158,7 @@ export default function BalanceTest({ athlete }) {
   function finish() {
     wakeRef.current?.release?.().catch(() => {});
     const r = computeBalance(dataRef.current);
-    const comparison = r.ok && summarizeBaseline(athlete, TEST)
-      ? compare(athlete, TEST, r.metrics, METRICS)
-      : null;
-    setResult({ ...r, comparison });
+    setResult(r);
     setRunId((n) => n + 1);
     setPhase('results');
   }
@@ -203,7 +199,7 @@ export default function BalanceTest({ athlete }) {
           <div className="row">
             <button className="primary" onClick={begin}>Start test</button>
           </div>
-          <BaselineProgress athlete={athlete} test={TEST} />
+          {canSeeData && <BaselineProgress subjectUid={subject.uid} test={TEST} />}
         </div>
       )}
 
@@ -260,16 +256,18 @@ export default function BalanceTest({ athlete }) {
             <div className="callout danger">Test didn't work: {result.reason} Run it again.</div>
           ) : (
             <>
-              {!result.comparison && <NoBaselineNote athlete={athlete} />}
-              <ResultCards metrics={result.metrics} spec={METRICS} comparison={result.comparison} />
-              <StanceBars stances={result.stances} />
-              <SaveTrial
+              <ResultPanel
                 key={runId}
-                athlete={athlete}
+                subject={subject}
+                isSelf={isSelf}
+                canSeeData={canSeeData}
                 test={TEST}
                 metrics={result.metrics}
+                spec={METRICS}
                 onDiscard={() => { setResult(null); setPhase('intro'); }}
-              />
+              >
+                <StanceBars stances={result.stances} />
+              </ResultPanel>
             </>
           )}
           <div className="row">

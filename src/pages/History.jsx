@@ -1,10 +1,10 @@
-import { useState } from 'react';
 import { testById } from '../tests/registry.js';
-import { allTrials, compare, deleteTrial, deleteAthlete, exportCsv } from '../lib/baseline.js';
+import { allTrials, compare, exportCsv } from '../lib/baseline.js';
+import { deleteTrial } from '../lib/session.js';
 import { STATUS, formatWhen } from '../lib/status.js';
 import { formatMetric } from '../components/ResultCards.jsx';
 
-function download(name, text) {
+export function download(name, text) {
   const url = URL.createObjectURL(new Blob([text], { type: 'text/csv' }));
   const a = document.createElement('a');
   a.href = url;
@@ -18,9 +18,9 @@ const dayLabel = (iso) =>
 const timeLabel = (iso) =>
   new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 
-export default function History({ athlete, onAthleteDeleted }) {
-  const [, refresh] = useState(0);
-  const trials = allTrials(athlete).filter((t) => testById[t.test]);
+// Every result for one athlete. names: uid -> display name (for "run by").
+export default function History({ subjectUid, subjectName, isSelf, names }) {
+  const trials = allTrials(subjectUid).filter((t) => testById[t.test]);
 
   const byDay = [];
   for (const t of trials) {
@@ -32,36 +32,29 @@ export default function History({ athlete, onAthleteDeleted }) {
   function remove(t) {
     const test = testById[t.test];
     if (!confirm(`Delete this ${test.label} ${t.kind === 'baseline' ? 'baseline trial' : 'check'} from ${formatWhen(t.at)}?`)) return;
-    deleteTrial(athlete, t.test, t.at);
-    refresh((n) => n + 1);
+    deleteTrial(t.id).catch((e) => alert(`Couldn't delete: ${e.message}`));
   }
 
-  function removeAthlete() {
-    if (!confirm(`Delete ${athlete} and all ${trials.length} saved results? This can't be undone.`)) return;
-    deleteAthlete(athlete);
-    onAthleteDeleted();
-  }
-
-  const safeName = athlete.replace(/[^\w-]+/g, '_');
+  const safeName = subjectName.replace(/[^\w-]+/g, '_');
 
   return (
     <section className="history">
       <header className="test-head history-head">
         <div>
-          <h2>{athlete}'s results</h2>
+          <h2>{isSelf ? 'Your results' : `${subjectName}'s results`}</h2>
           <p className="muted">{trials.length} saved result{trials.length === 1 ? '' : 's'}, newest first.</p>
         </div>
         <div className="row">
-          <button onClick={() => download(`${safeName}-results.csv`, exportCsv([athlete]))} disabled={!trials.length}>
+          <button
+            onClick={() => download(`${safeName}-results.csv`, exportCsv([subjectUid], names))}
+            disabled={!trials.length}
+          >
             Download CSV
-          </button>
-          <button onClick={() => download('all-athletes-results.csv', exportCsv())}>
-            CSV of all athletes
           </button>
         </div>
       </header>
 
-      {byDay.length === 0 && <div className="callout">Nothing saved yet. Run a test and save it.</div>}
+      {byDay.length === 0 && <div className="callout">No results yet.</div>}
 
       {byDay.map(({ day, trials: list }) => (
         <div className="day" key={day}>
@@ -70,11 +63,10 @@ export default function History({ athlete, onAthleteDeleted }) {
             {list.map((t) => {
               const test = testById[t.test];
               const status =
-                t.kind === 'check'
-                  ? STATUS[compare(athlete, t.test, t.metrics, test.metrics, t.at).status]
-                  : null;
+                t.kind === 'check' ? STATUS[compare(subjectUid, t.test, t.metrics, t.at).status] : null;
+              const by = t.testerUid && t.testerUid !== subjectUid ? names.get(t.testerUid) : null;
               return (
-                <div className="trial" key={`${t.test}-${t.at}`}>
+                <div className="trial" key={t.id}>
                   <div className="trial-when">{timeLabel(t.at)}</div>
                   <div className="trial-main">
                     <div className="trial-title">
@@ -83,6 +75,7 @@ export default function History({ athlete, onAthleteDeleted }) {
                         {t.kind === 'baseline' ? 'Baseline' : 'Post-hit check'}
                       </span>
                       {status && <span className={`chip ${status.cls}`}>{status.short}</span>}
+                      {by && <span className="muted small">run by {by}</span>}
                     </div>
                     <div className="trial-metrics muted small">
                       {Object.entries(test.metrics).map(([name, def]) => (
@@ -101,16 +94,6 @@ export default function History({ athlete, onAthleteDeleted }) {
           </div>
         </div>
       ))}
-
-      <div className="callout storage-note">
-        <b>Where this is stored:</b> only in this browser, on this device. Nothing is uploaded.
-        A different phone or laptop has its own separate records, and clearing this browser's
-        data erases them, so download a CSV to back up.
-      </div>
-
-      <div className="danger-zone">
-        <button className="danger-btn" onClick={removeAthlete}>Delete {athlete} and all results</button>
-      </div>
     </section>
   );
 }

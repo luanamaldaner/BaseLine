@@ -5,3 +5,5 @@ public/mediapipe-wasm/
 *.local
 .firebase/
 firebase-debug.log
+functions/shared/
+functions/node_modules/

@@ -1,29 +1,14 @@
 // Every test in one place: its metrics, its headline metric for trend charts,
 // and what it's for. The Overview and History pages read from this.
 
-import { METRICS as SYMPTOM_METRICS } from './symptoms/symptoms.js';
 import { METRICS as BALANCE_METRICS } from './balance/balance.js';
 import { METRICS as REACTION_METRICS } from './reaction/reaction.js';
 import { METRICS as EYE_METRICS } from './eye/pursuit.js';
-import SymptomsTest from './symptoms/SymptomsTest.jsx';
 import BalanceTest from './balance/BalanceTest.jsx';
 import ReactionTest from './reaction/ReactionTest.jsx';
 import EyeTest from './eye/EyeTest.jsx';
 
 export const TESTS = [
-  {
-    id: 'symptoms',
-    label: 'Symptoms',
-    Component: SymptomsTest,
-    metrics: SYMPTOM_METRICS,
-    headline: 'severity',
-    time: '2 min',
-    device: 'Any',
-    measures: 'What the athlete feels: 22 symptoms like headache, dizziness, and feeling foggy.',
-    system: 'Self-report',
-    bestAt: 'The most common sign of concussion, and usually the first thing to change after a hit.',
-    limits: 'Only as honest as the athlete. Players who want to stay in the game often under-report.',
-  },
   {
     id: 'balance',
     label: 'Balance',

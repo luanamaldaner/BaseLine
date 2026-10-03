@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { REACTION, METRICS, randomDelay, computeReaction } from './reaction.js';
-import { compare, summarizeBaseline } from '../../lib/baseline.js';
-import ResultCards from '../../components/ResultCards.jsx';
-import SaveTrial, { BaselineProgress, NoBaselineNote } from '../../components/SaveTrial.jsx';
+import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 
 const TEST = 'reaction';
 
-export default function ReactionTest({ athlete }) {
+export default function ReactionTest({ subject, isSelf, canSeeData }) {
   const padRef = useRef(null);
   const textRef = useRef(null);
   const run = useRef(null); // mutable state of the running test
@@ -118,10 +116,7 @@ export default function ReactionTest({ athlete }) {
     const r = run.current;
     r.state = 'done';
     const res = computeReaction(r.times, r.falseStarts, r.lapses);
-    const comparison = res.ok && summarizeBaseline(athlete, TEST)
-      ? compare(athlete, TEST, res.metrics, METRICS)
-      : null;
-    setResult({ ...res, comparison });
+    setResult(res);
     setPhase('results');
   }
 
@@ -186,7 +181,7 @@ export default function ReactionTest({ athlete }) {
               {phase === 'results' ? 'Run again' : 'Start test'}
             </button>
           </div>
-          {phase !== 'results' && <BaselineProgress athlete={athlete} test={TEST} />}
+          {phase !== 'results' && canSeeData && <BaselineProgress subjectUid={subject.uid} test={TEST} />}
         </div>
       )}
 
@@ -196,16 +191,18 @@ export default function ReactionTest({ athlete }) {
             <div className="callout danger">Test didn't work: {result.reason} Run it again.</div>
           ) : (
             <>
-              {!result.comparison && <NoBaselineNote athlete={athlete} />}
-              <ResultCards metrics={result.metrics} spec={METRICS} comparison={result.comparison} />
-              <TapStrip times={result.times} />
-              <SaveTrial
+              <ResultPanel
                 key={runId}
-                athlete={athlete}
+                subject={subject}
+                isSelf={isSelf}
+                canSeeData={canSeeData}
                 test={TEST}
                 metrics={result.metrics}
+                spec={METRICS}
                 onDiscard={() => { setResult(null); setPhase('intro'); }}
-              />
+              >
+                <TapStrip times={result.times} />
+              </ResultPanel>
             </>
           )}
         </div>
