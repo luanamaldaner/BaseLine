@@ -106,6 +106,8 @@ function ConditionTags({ c }) {
     c.rested === false && 'Not rested',
     c.place === 'sideline' && 'Loud sideline',
     c.light === 'sun' && 'Direct sun',
+    c.heat === true && 'Overheated',
+    c.pain === true && 'Injury or pain',
   ].filter(Boolean);
   if (!tags.length && !c.device) return null;
   return (

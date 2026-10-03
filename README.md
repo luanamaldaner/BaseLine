@@ -26,7 +26,7 @@ The phone eye-test variant, **`eyePhone`**, has its own baseline, separate from 
 
 **Run all three** guides the athlete through reaction, eyes, then balance, with a combined save step and overall call. Spoken instructions are available for reaction and eyes and automatic for balance; beeps and vibration provide additional cues where supported. Individual tests are also available.
 
-Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at three trials per test, although scoring can use fewer.
+Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at four trials per test: the first is practice and is not scored (the first attempt at an unfamiliar test is usually the worst), and scoring can use fewer.
 
 ## Roles and privacy
 
@@ -38,6 +38,7 @@ Coaches create teams. Athletes join with a six-character code or a QR invite ope
 | Run a post-hit check | Self or any teammate | Any athlete on the team |
 | View saved scores, trends, and history | Own results only | Everyone on the team |
 | Delete results | Own results | Any result on the team |
+| Medical history (prior concussions, ADHD, vision, balance problems) | Enter and edit their own | See each athlete's, beside their results |
 | Manage membership | Leave the team | Invite or remove athletes |
 
 A teammate running a check sees **only the call and action, never the athlete's numerical results in the UI**. The testing device processes the new measurements and judges them against published baseline cutoffs in `teams/{id}/ranges`. These documents contain cutoffs and baseline trial counts, not trial results. The new result is saved for the athlete and coach; the teammate cannot read it back.
@@ -52,7 +53,7 @@ A consent screen explains screening limits and data use before first use, record
 
 [shared/assess.js](shared/assess.js) defines the metric directions, baseline summaries, published cutoffs, and per-test decisions.
 
-1. Compute each metric's mean and sample standard deviation across saved baseline trials.
+1. Compute each metric's mean and sample standard deviation across saved baseline trials, dropping the oldest as practice once more than three are on file.
 2. Use an effective spread equal to the largest of the standard deviation, 10% of the absolute mean, the metric's floor, and a tiny numerical floor (`1e-9`). Error and mistake counts have a spread floor of 1.
 3. Flag a metric only when it is more than **2 spreads worse** than the mean: above `mean + 2 × spread` for higher-is-worse metrics, or below `mean - 2 × spread` for lower-is-worse metrics.
 
@@ -85,13 +86,15 @@ Every result is compared to the athlete's **own baseline**, so anything that dif
 
 **Set up a testing station.** A shaded, quiet spot with a firm floor and the athlete's back to the field: behind the bench or in the medical tent. They aren't watching the game, there's no crowd in the camera's view, and the light is consistent. **Record baselines in the same kind of spot**, on the same type of device.
 
-**Before every test the app asks three questions** ([ConditionsGate](src/components/ConditionsGate.jsx)), and saves the answers with each result:
+**Before every test the app asks five questions** ([ConditionsGate](src/components/ConditionsGate.jsx)), and saves the answers with each result:
 
 | Question | Why it matters | What the app does |
 |---|---|---|
 | Rested 15+ min since playing? | Hard exercise alone degrades balance and reaction time for about 15–20 minutes (documented for the BESS balance test). An athlete pulled straight off the field looks impaired because they just sprinted. | Offers a 15-minute rest timer; a baseline taken without rest gets a redo prompt. |
 | Quiet spot or loud sideline? | Noise distracts the athlete and can drown out audio cues. Noise doesn't affect the camera model. | Suggests moving behind the bench or into the tent. |
 | Indoors, shade, or direct sun? | Sun washes out the reaction screen and puts the face in shadow (bad for eye tracking). | Suggests moving into shade. |
+| Overheated, or no water in the last hour? | Heat and dehydration slow thinking and balance on their own. | Suggests water and shade first; a baseline taken that way gets a redo prompt. |
+| Any other injury or pain right now? | Pain, a limp, or fear of an injury makes every test worse, and it isn't concussion. | Noted with the result; a baseline taken that way gets a redo prompt. |
 
 The device type (phone or laptop) is saved too. Flagged conditions show as tags in History and as columns in the CSV export, so we can later check which confounds actually moved the numbers.
 
@@ -101,7 +104,11 @@ The device type (phone or laptop) is saved too. Flagged conditions show as tags 
 
 **Baseline sanity checks** ([lib/validity.js](src/lib/validity.js)): a baseline far worse than a healthy athlete usually scores (very slow reactions, eyes not keeping up with the dot, many balance errors) gets a "redo?" prompt before saving. A poor baseline, whether from a bad setup or deliberately doing badly ("sandbagging", a known problem with baseline tests), makes later checks look fine. The cutoffs are generous starting points to be tuned with volunteer data.
 
-**Other confounds to watch for** (not yet measured by the app): heat and dehydration, practice effects (the first baseline trial is often the worst), pain, fear, or an orthopedic injury, pre-existing conditions (ADHD, prior concussions, vestibular or vision problems), sleep, caffeine, medication, and age (re-baseline every season).
+**Pre-existing conditions** (prior concussions, ADHD, vision problems, vestibular or balance problems) shift what a normal result looks like and how long recovery takes. Athletes record them on the Team tab ([MedicalHistory](src/components/MedicalHistory.jsx)); the coach sees them beside that athlete's results. They are private to the athlete and the coach (`teams/{id}/history/{uid}`), never on the roster teammates can read.
+
+**Practice effects:** the first baseline trial is usually the worst, and a bad first trial widens the baseline's spread and hides a later deficit. Four baseline trials are recorded and the oldest is dropped as practice (`summarize` in [shared/assess.js](shared/assess.js)); an older three-trial baseline keeps all three.
+
+**Other confounds to watch for** (not yet measured by the app): sleep, caffeine, medication, and age (re-baseline every season).
 
 ## Tech stack
 
@@ -132,7 +139,10 @@ teams/{id}
     subjectUid, testerUid, test, kind: baseline | check, at, metrics
     status: normal | monitor | refer | no-baseline   # checks only
     conditions?: { rested: bool, place: quiet | sideline,
-                   light: indoor | shade | sun, device: phone | laptop }
+                   light: indoor | shade | sun, device: phone | laptop,
+                   heat: bool, pain: bool }
+  history/{uid}                  # athlete + coach only; not on the roster
+    concussions: 0-20, adhd, vision, vestibular: bool, updatedAt
   ranges/{subjectUid}_{test}
     subjectUid, test, n
     limits: { metric: { worse: higher | lower, limit: number } }
@@ -174,6 +184,8 @@ node scripts/falsepositives.mjs  # how often the scoring rule flags a healthy at
 ```
 
 ### Deployment
+
+The rules are part of the app: a change to `firestore.rules` (allowed condition keys, the `history` collection) must be deployed with `firebase deploy --only firestore:rules` before, or together with, the hosting build that uses it. Until then the app's fallback saves results without the conditions tag and medical history cannot be saved.
 
 With Firebase CLI access to the project:
 

@@ -8,6 +8,7 @@ import Avatar from '../components/Avatar.jsx';
 import QrCode from '../components/QrCode.jsx';
 import { inviteUrl } from '../lib/invite.js';
 import { AlertsPanel } from '../components/Alerts.jsx';
+import { HistoryForm } from '../components/MedicalHistory.jsx';
 import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
 
 const RANK = { refer: 0, monitor: 1, normal: 2, none: 3 };
@@ -199,8 +200,8 @@ export function CoachTeam({ team, members, names }) {
   );
 }
 
-// Athlete: their team + leave.
-export function AthleteTeam({ team, members }) {
+// Athlete: their team, their medical history, and leave.
+export function AthleteTeam({ team, members, history }) {
   const leave = () => {
     if (confirm(`Leave ${team.name}? Your results stay with the team's coach.`)) {
       leaveTeam().catch((e) => alert(`Couldn't leave: ${e.message}`));
@@ -218,6 +219,7 @@ export function AthleteTeam({ team, members }) {
         You can run post-hit checks on any teammate. You only ever see your own numbers; your
         coach sees everyone’s.
       </p>
+      <HistoryForm key={history?.updatedAt ?? 'new'} history={history} />
       <button className="danger-btn" onClick={leave}>Leave team</button>
     </section>
   );

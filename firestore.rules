@@ -44,6 +44,14 @@ rules_version = '2';
 //   create one for any athlete on the team, but can never read it back.
 //   Readable only by the athlete it belongs to and the team's coach.
 //
+// Collection: teams/{teamId}/history/{uid}   (pre-existing conditions)
+//   - concussions: int 0-20 - prior diagnosed concussions
+//   - adhd, vision, vestibular: bool
+//   - updatedAt: string, ISO-8601
+//   Shifts baselines and recovery, so the coach needs it to read results.
+//   Private to the athlete and the coach: NOT on the member doc, which the
+//   whole team can list to pick who to test.
+//
 // Collection: teams/{teamId}/ranges/{subjectUid}_{test}
 //   Baseline cutoffs an athlete publishes so teammates' phones can judge a
 //   post-hit check without seeing any results. No results are stored here.
@@ -87,12 +95,24 @@ service cloud.firestore {
     //   rested: bool (15+ min since playing/exercise)
     //   place: 'quiet' | 'sideline'   light: 'indoor' | 'shade' | 'sun'
     //   device: 'phone' | 'laptop'
+    //   heat: bool (overheated, or no water in the last hour)
+    //   pain: bool (another injury or pain right now)
     function isValidConditions(c) {
-      return c is map && c.keys().hasOnly(['rested', 'place', 'light', 'device']) &&
+      return c is map && c.keys().hasOnly(['rested', 'place', 'light', 'device', 'heat', 'pain']) &&
         (!('rested' in c) || c.rested is bool) &&
         (!('place' in c) || c.place in ['quiet', 'sideline']) &&
         (!('light' in c) || c.light in ['indoor', 'shade', 'sun']) &&
-        (!('device' in c) || c.device in ['phone', 'laptop']);
+        (!('device' in c) || c.device in ['phone', 'laptop']) &&
+        (!('heat' in c) || c.heat is bool) &&
+        (!('pain' in c) || c.pain is bool);
+    }
+
+    // Pre-existing conditions (see the data model above).
+    function isValidHistory(d) {
+      return hasExactFields(d, ['concussions', 'adhd', 'vision', 'vestibular', 'updatedAt']) &&
+        d.concussions is int && d.concussions >= 0 && d.concussions <= 20 &&
+        d.adhd is bool && d.vision is bool && d.vestibular is bool &&
+        isValidDateString(d.updatedAt);
     }
 
     function validName(s) {
@@ -277,6 +297,15 @@ service cloud.firestore {
           getAfter(/databases/$(database)/documents/users/$(memberUid)).data.teamId == teamId;
         allow update: if false;
         // Leave the team yourself, or be removed by the coach.
+        allow delete: if isOwner(memberUid) || isCoach(teamId);
+      }
+
+      match /history/{memberUid} {
+        // The athlete and the coach only. Teammates can list members to pick
+        // who to test, so this must never live on the member doc.
+        allow read: if isCoach(teamId) || isOwner(memberUid);
+        allow create, update: if isOwner(memberUid) && isMember(teamId) &&
+          isValidHistory(request.resource.data);
         allow delete: if isOwner(memberUid) || isCoach(teamId);
       }
 

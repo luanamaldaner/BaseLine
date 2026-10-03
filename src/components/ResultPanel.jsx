@@ -8,7 +8,7 @@ import { baselineConcerns } from '../lib/validity.js';
 
 // "Baseline: 2 of 3 trials recorded" (only for people allowed to see it).
 export function BaselineProgress({ subjectUid, test }) {
-  const n = summarizeBaseline(subjectUid, test)?.n ?? 0;
+  const n = summarizeBaseline(subjectUid, test)?.recorded ?? 0;
   return (
     <p className="muted small">
       Baseline: {Math.min(n, BASELINE_TRIALS)} of {BASELINE_TRIALS} trials recorded
@@ -62,6 +62,8 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
     if (!force) {
       const c = [
         ...(conditions?.rested === false ? ['They hadn’t rested since exercising, which drags scores down.'] : []),
+        ...(conditions?.heat === true ? ['They were overheated or short on water, which drags scores down.'] : []),
+        ...(conditions?.pain === true ? ['They had another injury or pain, which drags scores down.'] : []),
         ...baselineConcerns(test, metrics),
       ];
       if (c.length) return setConcerns(c);

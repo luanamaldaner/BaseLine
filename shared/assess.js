@@ -36,7 +36,12 @@ export const METRIC_KEYS = {
 };
 
 export const TEST_IDS = Object.keys(SPECS);
-export const BASELINE_TRIALS = 3;
+// Baseline trials to record per test. The first is practice and is not
+// scored: the first attempt at an unfamiliar test is usually the worst, and a
+// bad first trial widens the baseline's spread and hides a later deficit.
+export const BASELINE_TRIALS = 4;
+export const PRACTICE_TRIALS = 1;
+const SCORED_MIN = BASELINE_TRIALS - PRACTICE_TRIALS;
 
 // With only a few baseline trials the SD is unreliable (often ~0), so never
 // let it drop below this fraction of the mean.
@@ -50,15 +55,21 @@ const sd = (xs) => {
   return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1));
 };
 
-// baselines: [{ metrics }] -> { n, stats: { name: { mean, sd, n } } } or null
+// baselines: [{ at, metrics }] -> { n, recorded, stats } or null
+//   n:        trials actually scored (the practice trial dropped)
+//   recorded: trials on file, for progress displays
+// The practice trial is dropped only once more than the scored minimum is on
+// file, so an athlete with an older three-trial baseline keeps all three.
 export function summarize(baselines) {
   if (!baselines.length) return null;
+  const ordered = [...baselines].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
+  const scored = ordered.length > SCORED_MIN ? ordered.slice(PRACTICE_TRIALS) : ordered;
   const stats = {};
-  for (const name of Object.keys(baselines[0].metrics)) {
-    const xs = baselines.map((t) => t.metrics[name]).filter(Number.isFinite);
+  for (const name of Object.keys(scored[0].metrics)) {
+    const xs = scored.map((t) => t.metrics[name]).filter(Number.isFinite);
     if (xs.length) stats[name] = { mean: mean(xs), sd: sd(xs), n: xs.length };
   }
-  return { n: baselines.length, stats };
+  return { n: scored.length, recorded: baselines.length, stats };
 }
 
 export function spreadFor(stat, def) {

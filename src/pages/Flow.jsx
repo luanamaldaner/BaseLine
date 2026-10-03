@@ -4,7 +4,7 @@ import { testById } from '../tests/registry.js';
 import { REACTION } from '../tests/reaction/reaction.js';
 import { PURSUIT, CALIBRATION } from '../tests/eye/pursuit.js';
 import { BALANCE } from '../tests/balance/balance.js';
-import { compare, summarizeBaseline } from '../lib/baseline.js';
+import { compare, summarizeBaseline, BASELINE_TRIALS } from '../lib/baseline.js';
 import { saveBaseline, submitCheck } from '../lib/session.js';
 import { STATUS, overallStatus } from '../lib/status.js';
 import { say, hush, beep, unlockAudio } from '../lib/cues.js';
@@ -299,6 +299,8 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
     if (!force) {
       const c = [
         ...(conditions?.rested === false ? ['They hadn’t rested since exercising, which drags scores down.'] : []),
+        ...(conditions?.heat === true ? ['They were overheated or short on water, which drags scores down.'] : []),
+        ...(conditions?.pain === true ? ['They had another injury or pain, which drags scores down.'] : []),
         ...done.flatMap((s) => baselineConcerns(tid(s), results[s.id].metrics).map((m) => `${s.title}: ${m}`)),
       ];
       if (c.length) return setConcerns(c);
@@ -337,7 +339,7 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
           <b>{canSeeData ? 'No baseline to compare against yet' : `Tests finished for ${subject.name}`}</b>
           <span>
             {canSeeData
-              ? 'Save these as baseline trials. After three, a post-hit run gets an overall call here.'
+              ? `Save these as baseline trials. After ${BASELINE_TRIALS}, a post-hit run gets an overall call here.`
               : 'Submit them as post-hit checks to get the call. The numbers go only to them and the coach.'}
           </span>
         </div>

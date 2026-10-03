@@ -21,7 +21,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
   const all = RESULT_TESTS.map((test) => ({
     test,
     trials: getTrials(subjectUid, test.id),
-    baseN: summarizeBaseline(subjectUid, test.id)?.n ?? 0,
+    baseN: summarizeBaseline(subjectUid, test.id)?.recorded ?? 0,
     check: latestCheck(subjectUid, test),
   }));
   // The eye test has a laptop and a phone baseline. Show the phone card only

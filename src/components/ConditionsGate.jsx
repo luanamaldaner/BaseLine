@@ -11,12 +11,14 @@ export default function ConditionsGate({ kind, onReady, onBack }) {
   const [rested, setRested] = useState(null);
   const [place, setPlace] = useState(null);
   const [light, setLight] = useState(null);
+  const [heat, setHeat] = useState(null);
+  const [pain, setPain] = useState(null);
   const [timerEnd, setTimerEnd] = useState(null);
   const headingRef = useRef(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
 
-  const done = rested !== null && place && light;
-  const ready = () => onReady({ rested, place, light, device: deviceType() });
+  const done = rested !== null && place && light && heat !== null && pain !== null;
+  const ready = () => onReady({ rested, place, light, heat, pain, device: deviceType() });
 
   if (timerEnd) {
     return (
@@ -75,6 +77,26 @@ export default function ConditionsGate({ kind, onReady, onBack }) {
       />
       {light === 'sun' && (
         <p className="hint">Sun washes out the screen and puts the face in shadow. Move into shade if you can.</p>
+      )}
+
+      <Question
+        label="Overheated, or no water in the last hour?"
+        value={heat}
+        onChange={setHeat}
+        options={[[false, 'No, fine'], [true, 'Yes']]}
+      />
+      {heat === true && (
+        <p className="hint">Heat and dehydration slow thinking and balance on their own. Water and shade first, if you can.</p>
+      )}
+
+      <Question
+        label="Any other injury or pain right now?"
+        value={pain}
+        onChange={setPain}
+        options={[[false, 'No'], [true, 'Yes']]}
+      />
+      {pain === true && (
+        <p className="hint">Pain, a limp, or worry about an injury makes every test worse. It gets noted with the result; it isn’t concussion.</p>
       )}
 
       <div className="row">

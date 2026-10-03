@@ -1185,3 +1185,13 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
 .legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .trend-legend .key { margin: 0 !important; flex: none; width: 10px; height: 10px; }
 .trend-legend .key.band { border-radius: 3px; }
+
+/* Pre-existing conditions: the athlete's form, and the coach's one-line note */
+.history-form { display: grid; gap: 0.6rem; max-width: 480px; }
+.history-form h3 { margin: 0; }
+.history-count { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.history-count input { width: 5rem; text-align: center; }
+.history-flag { display: flex; align-items: center; gap: 0.6rem; }
+.history-flag input { width: 1.2rem; height: 1.2rem; }
+.history-line { margin: 0 0 0.75rem; color: var(--muted); font-size: 0.9rem; }
+.history-line b { color: var(--text); }

@@ -8,6 +8,7 @@ import Overview, { Guide } from './pages/Overview.jsx';
 import History from './pages/History.jsx';
 import RunTest from './pages/RunTest.jsx';
 import { Roster, CoachTeam, AthleteTeam } from './pages/Team.jsx';
+import { HistoryLine } from './components/MedicalHistory.jsx';
 import { Logo, APP_NAME } from './brand.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
 import { pendingInvite, clearInvite } from './lib/invite.js';
@@ -144,7 +145,7 @@ function AthleteApp({ s }) {
       {tab === 'me' && <Overview subjectUid={me} isSelf onOpenTest={openTest} />}
       {tab === 'test' && <RunTest people={people} selfUid={me} isCoach={false} pick={pick} setPick={setPick} />}
       {tab === 'history' && <History subjectUid={me} subjectName={s.profile.name} isSelf names={nameMap(s)} />}
-      {tab === 'team' && <AthleteTeam team={s.team} members={members} />}
+      {tab === 'team' && <AthleteTeam team={s.team} members={members} history={s.history.get(me)} />}
       {tab === 'learn' && <Guide />}
     </Frame>
   );
@@ -211,6 +212,7 @@ function CoachApp({ s }) {
               ))}
             </div>
           </div>
+          <HistoryLine history={s.history.get(selected.uid)} />
           {playerTab === 'dashboard' ? (
             <Overview subjectUid={selected.uid} isSelf={false} onOpenTest={(testId) => openTestFor(selected.uid, testId)} />
           ) : (

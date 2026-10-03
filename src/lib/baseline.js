@@ -61,6 +61,8 @@ export function exportCsv(subjectUids, names) {
       place: t.conditions?.place ?? '',
       light: t.conditions?.light ?? '',
       device: t.conditions?.device ?? '',
+      heat: t.conditions?.heat ?? '',
+      pain: t.conditions?.pain ?? '',
       ...t.metrics,
     })),
   );

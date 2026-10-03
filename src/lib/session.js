@@ -26,6 +26,7 @@ const empty = () => ({
   trials: new Map(), // id -> trial
   trialsReady: false,
   ranges: new Map(), // `${uid}_${test}` -> { subjectUid, test, n, limits }
+  history: new Map(), // uid -> { concussions, adhd, vision, vestibular, updatedAt } (own, or everyone's as coach)
   error: null,
 });
 
@@ -99,6 +100,14 @@ function startTeam(teamId, uid, role) {
     onSnapshot(collection(db, 'teams', teamId, 'ranges'), (snap) => {
       set({ ranges: new Map(snap.docs.map((d) => [d.id, d.data()])) });
     }, fail),
+    // Pre-existing conditions: the coach sees everyone's, an athlete their own.
+    role === 'coach'
+      ? onSnapshot(collection(db, 'teams', teamId, 'history'), (snap) => {
+          set({ history: new Map(snap.docs.map((d) => [d.id, d.data()])) });
+        }, fail)
+      : onSnapshot(doc(db, 'teams', teamId, 'history', uid), (d) => {
+          set({ history: d.exists() ? new Map([[uid, d.data()]]) : new Map() });
+        }, fail),
   );
 }
 
@@ -126,7 +135,7 @@ function watchProfile(user) {
       if (key) startTeam(profile.teamId, user.uid, profile.role);
       else {
         stopTeam();
-        set({ team: null, members: new Map(), trials: new Map(), trialsReady: false, ranges: new Map() });
+        set({ team: null, members: new Map(), trials: new Map(), trialsReady: false, ranges: new Map(), history: new Map() });
       }
     }
   };
@@ -268,6 +277,18 @@ export async function leaveTeam() {
   batch.delete(doc(db, 'teams', state.profile.teamId, 'members', me));
   batch.update(doc(db, 'users', me), { teamId: null });
   await withTimeout(batch.commit());
+}
+
+// Your own pre-existing conditions, readable by you and the coach.
+export function saveHistory({ concussions, adhd, vision, vestibular }) {
+  const data = {
+    concussions: Math.max(0, Math.min(20, Math.round(Number(concussions) || 0))),
+    adhd: !!adhd,
+    vision: !!vision,
+    vestibular: !!vestibular,
+    updatedAt: now(),
+  };
+  return withTimeout(setDoc(doc(db, 'teams', state.profile.teamId, 'history', uid()), data));
 }
 
 export function removeMember(memberUid) {

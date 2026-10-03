@@ -35,7 +35,7 @@ export function overallStatus(checks) {
 // How many of the runnable tests have a full baseline (on any device).
 export function baselinesComplete(subjectUid) {
   return TESTS.filter((t) =>
-    (t.variants ?? [t.id]).some((id) => (summarizeBaseline(subjectUid, id)?.n ?? 0) >= BASELINE_TRIALS),
+    (t.variants ?? [t.id]).some((id) => (summarizeBaseline(subjectUid, id)?.recorded ?? 0) >= BASELINE_TRIALS),
   ).length;
 }
 
