@@ -113,8 +113,10 @@ function Ring({ done, total }) {
     <span className="ring" title={`Baselines complete for ${done} of ${total} tests`}>
       <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden>
         <circle cx="20" cy="20" r={r} className="ring-track" />
-        <circle cx="20" cy="20" r={r} className="ring-fill"
-          strokeDasharray={`${(done / total) * c} ${c}`} transform="rotate(-90 20 20)" />
+        {done > 0 && (
+          <circle cx="20" cy="20" r={r} className="ring-fill"
+            strokeDasharray={`${(done / total) * c} ${c}`} transform="rotate(-90 20 20)" />
+        )}
       </svg>
       <span className="ring-text" aria-hidden>{done}/{total}</span>
       <span className="sr-only">Baselines complete for {done} of {total} tests</span>
