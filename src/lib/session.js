@@ -38,6 +38,11 @@ function set(patch) {
   listeners.forEach((fn) => fn());
 }
 
+// Dev only (stripped from production builds): load fake state from the
+// browser console to work on logged-in screens without an account, e.g.
+//   __previewSession({ authChecked: true, user: { uid: 'c1' }, profile: {...}, ... })
+if (import.meta.env.DEV) window.__previewSession = set;
+
 export function useSession() {
   return useSyncExternalStore(
     (fn) => {
