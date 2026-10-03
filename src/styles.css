@@ -1052,3 +1052,34 @@ main { min-width: 0; }
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3); font-size: calc(0.9rem * var(--text-scale));
 }
 @media (min-width: 641px) { .update-banner { bottom: 20px; } }
+
+/* Phone nav, floating: a frosted pill inset from the screen edges. Icons
+   only, with the label shown on the active tab. */
+@media (max-width: 640px) {
+  .app { --phone-nav-height: 62px; padding-bottom: calc(var(--phone-nav-height) + env(safe-area-inset-bottom) + 32px); }
+  .app.focus { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .tabs {
+    inset: auto 12px calc(10px + env(safe-area-inset-bottom)); width: auto;
+    max-width: 440px; margin-inline: auto; height: var(--phone-nav-height);
+    align-items: center; gap: 2px; padding: 6px;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: color-mix(in srgb, var(--surface) 80%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.5); backdrop-filter: blur(18px) saturate(1.5);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28), 0 2px 8px rgba(0, 0, 0, 0.14);
+  }
+  .tabs button {
+    flex: 1 1 0; height: 100%; min-height: 0; border-radius: 999px; color: var(--muted);
+    transition: flex-grow 0.25s ease, background-color 0.2s ease, color 0.2s ease;
+  }
+  .tabs button.active { flex-grow: 2.6; background: var(--accent-dim); color: var(--accent); }
+  .tab-phone { grid-auto-flow: column; align-items: center; justify-content: center; gap: 6px; }
+  .tab-phone > span:last-child {
+    font-size: calc(0.78rem * var(--text-scale)); font-weight: 700; white-space: nowrap;
+    /* inactive: hidden visually, still read aloud */
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%);
+  }
+  .tabs button.active .tab-phone > span:last-child { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
+  .tab-icon svg { width: 24px; height: 24px; }
+  .tab-icon .tab-badge { top: -5px; left: 13px; }
+  .update-banner { bottom: calc(env(safe-area-inset-bottom) + 86px); }
+}
