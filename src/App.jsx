@@ -50,6 +50,22 @@ export default function App() {
   return s.profile.role === 'coach' ? <CoachApp s={s} /> : <AthleteApp s={s} />;
 }
 
+// Results not yet on the server, and whether the server can be reached at
+// all. Nothing is shown when everything is synced and reachable.
+function SyncStatus({ s }) {
+  const n = s.pendingWrites ?? 0;
+  const down = s.server && !s.server.ok;
+  if (!n && !down) return null;
+  const results = `${n} result${n === 1 ? '' : 's'}`;
+  return (
+    <p className={`sync-status ${down ? 'bad' : 'warn'}`} role="status">
+      {down
+        ? `Can’t reach the server. ${n ? `${results} saved on this device; they’ll sync when the connection works.` : ''} Try switching between Wi-Fi and cellular.`
+        : `Syncing ${results}…`}
+    </p>
+  );
+}
+
 function Splash({ text }) {
   return (
     <div className="gate">
@@ -105,6 +121,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
       )}
       {s.error && <div className="callout danger">{s.error}</div>}
       <main>{!focus && s.profile.role === 'athlete' && <InviteOffer />}{children}</main>
+      <SyncStatus s={s} />
       {!focus && (
         <footer className="muted small">
           Screening tool, not a diagnosis. Any athlete with a suspected concussion should be

@@ -31,6 +31,8 @@ const empty = () => ({
   recordsReady: new Set(),
   ranges: new Map(), // `${uid}_${test}` -> { subjectUid, test, n, limits }
   history: new Map(), // uid -> { concussions, adhd, vision, vestibular, updatedAt } (own, or everyone's as coach)
+  pendingWrites: 0, // results written locally and not yet acknowledged by the server
+  server: null, // { ok, at, ms } from the last reachability probe, or null before the first
   error: null,
 });
 
@@ -86,7 +88,8 @@ function startTeams(teamIds, uid, role) {
   const rosterReady = new Set();
   const rangeReady = new Set();
   set({ teams: new Map(), members: new Map(), trials: new Map(), trialsReady: false, rangesReady: false, recordsReady: new Set(), ranges: new Map(), rangesByTeam: new Map(), history: new Map() });
-  unsubs.team.push(() => { active = false; records.forEach((u) => u()); });
+  unsubs.team.push(() => { active = false; records.forEach((u) => u()); stopProbe(); });
+  probeServer(teamIds[0]);
   const fail = (e) => { if (active) set({ error: e.message }); };
   const publish = () => {
     if (!active) return;
@@ -504,10 +507,46 @@ export function syncRanges(subjectUid) {
   }
 }
 
+// A result is written to the local cache first and reaches the server when
+// the connection allows, so a slow or half-dead connection is NOT a failed
+// save: the write stays queued and goes through later. Racing it against a
+// timer called every slow network "Saving failed" while the result sat safely
+// in the queue. Only a rejection from the server (rules, bad data) fails.
+// Pending writes are counted for the footer, and probeServer tells "server
+// unreachable" apart from "writes stuck".
+let pendingWrites = 0;
+const notePending = (delta) => {
+  pendingWrites = Math.max(0, pendingWrites + delta);
+  set({ pendingWrites });
+};
+
 function addTrialDoc(trial) {
   const ref = doc(collection(db, 'users', trial.subjectUid, 'trials'));
-  withTimeout(setDoc(ref, trial)).catch((e) => set({ error: 'Saving failed: ' + e.message }));
+  notePending(1);
+  setDoc(ref, trial)
+    .then(() => { if (state.error?.startsWith('Saving failed')) set({ error: null }); })
+    .catch((e) => set({ error: 'Saving failed: ' + e.message }))
+    .finally(() => notePending(-1));
   return { id: ref.id, ...trial };
+}
+
+// Can this device reach the server right now? A small read with a short
+// timeout, repeated: every 30 s while fine, every 10 s while not. Shown in
+// the footer, so "results saved on this phone, not syncing" is visible
+// instead of a mystery.
+let probeTimer = null;
+const stopProbe = () => clearTimeout(probeTimer);
+async function probeServer(teamId) {
+  stopProbe();
+  if (!teamId) return;
+  const started = Date.now();
+  try {
+    await withTimeout(getDocFromServer(doc(db, 'teams', teamId)), 8000);
+    set({ server: { ok: true, at: Date.now(), ms: Date.now() - started } });
+  } catch {
+    set({ server: { ok: false, at: Date.now() } });
+  }
+  probeTimer = setTimeout(() => probeServer(teamId), state.server?.ok ? 30000 : 10000);
 }
 
 // Optional testing-conditions tag (see lib/conditions.js); left off if empty.

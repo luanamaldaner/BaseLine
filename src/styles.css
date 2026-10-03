@@ -1212,3 +1212,6 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
   .team-pages .trial-main { overflow-wrap: anywhere; }
   .team-pages .code { font-size: calc(clamp(1.5rem, 7vw, 2.6rem) * var(--text-scale)); }
 }
+
+/* Footer sync status: pending results, or the server being unreachable */
+.sync-status { margin: 0.75rem 0 0; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid currentColor; font-size: 0.9rem; }
