@@ -1,117 +1,184 @@
-# Dream Team Engineering - Software Track
+﻿# Baseline
 
-# Baseline
-*A free, browser-based concussion screen that compares each athlete to their own healthy self.*
+A browser-based sideline concussion screen that compares each athlete to their own healthy baseline.
 
-**Prompt:** Develop a technology-based solution that addresses a health-related challenge in sports, physical activity, or athletic participation.
+**[Live demo](https://baselinetest.web.app)** · **[Short demo run (?quick)](https://baselinetest.web.app/?quick)**
 
-## Problem
-- The CDC estimates **1.6–3.8 million** sports and recreation concussions in the US every year, and many go unreported or are never assessed.
-- Many high schools and most youth leagues have **no athletic trainer** on the sideline, so a volunteer coach makes the return-to-play call by eye.
-- Validated tools exist, but they need trained staff (SCAT6), a paid subscription (Sway), or dedicated eye-tracking hardware costing thousands of dollars (EyeBOX).
+Built for **Dream Team Engineering Designathon 2026 — Software track**: a technology-based solution addressing a health-related challenge in sports, physical activity, or athletic participation.
 
-## Users and buyers
-- **Users:** youth and high school coaches, parents.
-- **Buyers:** school districts, club leagues, state athletic associations, youth sports insurers.
+## The problem
 
-## How it works
-1. **Preseason:** each athlete records a baseline in about 5 minutes (1 practice run + 2–3 recorded trials, averaged, with the natural spread saved).
-2. **After a hit:** the coach runs the same 5-minute check on the sideline.
-3. **Result:** 🟢 normal · 🟡 monitor · 🔴 remove from play and refer to a clinician.
+- After a hit, a sideline coach needs a clear way to identify changes that warrant medical evaluation.
+- An athlete's usual performance matters: the same score can mean different things for different people.
+- Baseline tests and post-hit checks need to be accessible on ordinary phones and laptops, with results available to the athlete and coach.
 
-## Tests
-| Test | Device | Measures |
+## What it does
+
+Athletes record healthy baseline trials, then repeat the tests after a hit. Baseline compares the new measurements with that athlete's saved baseline and produces **Normal**, **Monitor**, or **Remove from play and refer**.
+
+| Test | Device and procedure | Measurements |
 |---|---|---|
-| **Symptom checklist** | Phone | 22 standard symptoms rated 0–6 (SCAT format) |
-| **Balance** | Phone motion sensor, held to chest | Sway in 3 stances (feet together, single leg, heel-to-toe), 20 s each, eyes closed |
-| **Reaction time** | Phone screen | Median and spread of tap delays over 15 randomly timed trials |
-| **Eye pursuit** | Laptop or phone front camera | Tracking error, pursuit gain, and catch-up saccades while following a moving dot |
+| Balance | Phone motion sensor; phone against chest, eyes closed, three 20-second stances: feet together, single leg, heel-to-toe | Average sway, single-leg sway, detected stumbles plus examiner-counted errors |
+| Reaction time | Phone or laptop; tap when the target turns green, with 3 practice and 15 scored trials | Median response time, spread of response times, early taps and missed signals |
+| Eye pursuit | Webcam or front camera; MediaPipe tracks eye landmarks through calibration and a moving-target task | Time on target, pursuit gain, catch-up saccade rate, lag; tracking error is stored but not scored |
 
-**Why these go together:** concussion presents differently in different athletes: some mainly show balance deficits, others eye-movement or reaction deficits. Clinical tools (SCAT6, VOMS) test several domains for this reason, and balance and eye control share the vestibular system.
+The phone eye-test variant, **`eyePhone`**, has its own baseline, separate from laptop **`eye`**, because camera, screen size, and viewing distance differ.
 
-**Scoring:** each metric is compared to the athlete's own baseline. A result more than 2 standard deviations worse is flagged. One flag → 🟡 monitor. Two or more flags, or significant symptoms → 🔴 remove and refer.
+**Run all three** guides the athlete through reaction, eyes, then balance, with a combined save step and overall call. Spoken instructions are available for reaction and eyes and automatic for balance; beeps and vibration provide additional cues where supported. Individual tests are also available.
 
-## Baseline protocol
-- Record preseason, healthy and rested (no hard exercise right before). Re-record each season.
-- Standardized setup: same device type, face ~50 cm from camera, good lighting, same dot path and speed; phone flat against chest for balance; shoes off, firm floor.
-- 1 practice run, then 2–3 recorded trials; store mean + standard deviation per metric.
-- Quality checks: retest if the face is lost in >15% of frames; drop blink frames; flag balance trials with a step or fall.
-- No baseline on file → compare to team averages with a "low confidence" label.
+Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at three trials per test, although scoring can use fewer.
 
-## Novelty
-- Smooth-pursuit eye testing with an ordinary camera instead of dedicated hardware.
-- Multiple domains in one 5-minute check; most free tools test only one.
-- No install, no hardware: a web link built for sidelines without a medical professional.
+## Roles and privacy
 
-## Tech
-- React web app, deployed on Vercel (HTTPS is required for camera and motion sensors).
-- **Google MediaPipe FaceLandmarker** (pretrained, no training needed): 478 face landmarks including iris centers and eye corners.
-- Browser DeviceMotion API for balance.
-- Local storage for baselines; no backend.
-- Our work is the measurement layer: iris-position signal, calibration (simple regression from a few fixation points), pursuit and sway metrics, baseline comparison.
+Coaches create teams. Athletes join with a six-character code or a QR invite opening `?join=CODE`; the invite survives signup so they do not need to retype it.
 
-## Running it
-First copy `.env.example` to `.env.local` and fill in the Firebase web config (ask a
-teammate, or run `firebase apps:sdkconfig WEB --project dte-hackathon`).
+| Capability | Athlete | Coach |
+|---|---|---|
+| Record a baseline | Own baseline only | Cannot record athletes' baselines |
+| Run a post-hit check | Self or any teammate | Any athlete on the team |
+| View saved scores, trends, and history | Own results only | Everyone on the team |
+| Delete results | Own results | Any result on the team |
+| Manage membership | Leave the team | Invite or remove athletes |
+
+A teammate running a check sees **only the call and action, never the athlete's numerical results in the UI**. The testing device processes the new measurements and judges them against published baseline cutoffs in `teams/{id}/ranges`. These documents contain cutoffs and baseline trial counts, not trial results. The new result is saved for the athlete and coach; the teammate cannot read it back.
+
+[Firestore rules](firestore.rules) enforce result access, baseline ownership, allowed fields, and deletion rights. Athletes query only their own trials; coaches can query the team's trials. Team members can read the roster and published ranges. This protects stored results, but the tester's device still handles the current measurement and computes its status.
+
+Coaches receive in-app alerts for checks run by others that return Monitor, Refer, or No baseline. Optional browser notifications work while the app is open, including in a background tab.
+
+A consent screen explains screening limits and data use before first use, records `consentedAt`, and asks for parent or guardian agreement for users under 18. The privacy notice remains accessible from the footer. Only final scores are saved: **no video or raw sensor recordings are uploaded**. Leaving or removing an athlete does not delete their results; full account deletion is not a self-service feature.
+
+## How scoring works
+
+[shared/assess.js](shared/assess.js) defines the metric directions, baseline summaries, published cutoffs, and per-test decisions.
+
+1. Compute each metric's mean and sample standard deviation across saved baseline trials.
+2. Use an effective spread equal to the largest of the standard deviation, 10% of the absolute mean, the metric's floor, and a tiny numerical floor (`1e-9`). Error and mistake counts have a spread floor of 1.
+3. Flag a metric only when it is more than **2 spreads worse** than the mean: above `mean + 2 × spread` for higher-is-worse metrics, or below `mean - 2 × spread` for lower-is-worse metrics.
+
+| Flagged metrics in one test | Call |
+|---|---|
+| 0 | Normal |
+| 1 | Monitor |
+| 2 or more | Remove from play and refer |
+
+The [overall call](src/lib/status.js) is Refer if any included test is Refer or at least two tests are Monitor; one Monitor yields Monitor. Otherwise it is Normal. A check without a baseline is stored as `no-baseline`, instructs removal from play, and counts as Refer overall. There is no team-average fallback. Missing or non-finite metric values are skipped during comparison.
+
+**This is a screening tool, not a diagnosis. The cutoffs are not clinically validated yet.** A normal result cannot rule out concussion or clear an athlete to return to play. Anyone with a suspected concussion should be removed from play and evaluated by a clinician regardless of the app's call. A clinical validation study is the next step.
+
+## Tech stack
+
+- **React + Vite** for the interface and build.
+- **MediaPipe FaceLandmarker**, a pretrained model running in the browser, for camera-based eye landmarks; the model and WebAssembly assets are served with the app.
+- **DeviceMotion API** for balance sensing; browser speech, audio, and vibration APIs for cues.
+- **Firebase Authentication** with email/password and password reset; **Firestore** for live results and persistent offline cache; **Firebase Hosting** for deployment.
+- **Installable PWA** with a manifest and production service worker that caches the app shell and fetched assets. Firestore separately caches data and queues writes for later sync.
+- **No custom backend server or deployed scoring function**: measurement and scoring run on the client.
+
+Offline use depends on a previous online visit, cached assets/data, and an existing session. Camera assets are cached when fetched; a first visit or account setup needs connectivity. Results are stored in Firestore, not solely in browser storage.
+
+## Data model
+
+Fields and permissions are defined in the header and validators of [firestore.rules](firestore.rules). Email/password credentials are managed by Firebase Auth.
+
+```text
+users/{uid}
+  role: coach | athlete (immutable), name, teamId: string | null
+  consentedAt?: ISO timestamp
+joinCodes/{code}
+  teamId                         # signed-in single-code lookup; no listing
+teams/{id}
+  name, coachUid, coachName, code, createdAt
+  members/{uid}
+    name, code, joinedAt
+  trials/{trialId}
+    subjectUid, testerUid, test, kind: baseline | check, at, metrics
+    status: normal | monitor | refer | no-baseline   # checks only
+  ranges/{subjectUid}_{test}
+    subjectUid, test, n
+    limits: { metric: { worse: higher | lower, limit: number } }
+```
+
+`test` is `balance`, `reaction`, `eye`, or `eyePhone`. Timestamps are ISO strings. Trial metric values are bounded numbers or `null` when unavailable:
+
+| Test | Exact `metrics` fields |
+|---|---|
+| `balance` | `sway`, `singleSway`, `errors` |
+| `reaction` | `medianMs`, `spreadMs`, `mistakes` |
+| `eye`, `eyePhone` | `onTarget`, `gain`, `saccadeRate`, `lagMs`, `trackingError` |
+
+## Running locally
+
+Use Node.js/npm compatible with Vite 8. Copy `.env.example` to `.env.local` and fill in the Firebase web config. Ask a teammate for the values or retrieve them with an authorized Firebase CLI session:
 
 ```bash
-npm install          # also copies MediaPipe's wasm into public/
-npm run dev          # http://localhost:5173 (laptop webcam)
-npm run dev:phone    # HTTPS on your LAN, for testing sensors/camera on a phone
+firebase apps:sdkconfig WEB --project dte-hackathon
+npm install
+npm run dev
 ```
-The face model ships in `public/models/`, so the app works offline.
+
+`npm install` also copies MediaPipe WebAssembly files into `public/`. The face model is in `public/models/`. The default local URL is `http://localhost:5173`.
+
+For phone sensors and camera testing on the same LAN:
+
+```bash
+npm run dev:phone
+```
+
+Open the HTTPS network URL printed by Vite on the phone and accept the local development certificate if prompted. Grant camera/motion permissions as requested; phone mode uses a self-signed HTTPS certificate.
+
+For logged-in screen previews without an account, development builds expose the **`__previewSession`** browser-console hook from [src/lib/session.js](src/lib/session.js). It accepts a partial session state with mock profile, team, and `Map` data. This changes local UI state only; it does not authenticate Firebase writes and is omitted from production builds.
+
+### Deployment
+
+With Firebase CLI access to the project:
+
+```bash
+npm run build
+firebase deploy --only hosting
+```
+
+When Firestore rules change, publish them separately:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+[firebase.json](firebase.json) serves `dist/` on the `baselinetest` Hosting site, rewrites routes to `index.html`, and points to `firestore.rules`.
 
 ## Code layout
+
+```text
+src/
+  App.jsx                  Authentication/consent gates and role-specific navigation
+  main.jsx                 React entry, invite capture, production service worker
+  brand.jsx, styles.css    Branding and responsive styles
+  pages/
+    AuthScreen.jsx         Email/password signup, login, password reset
+    Setup.jsx, Team.jsx    Profiles, team setup, roster, invitations, membership
+    Overview.jsx           Dashboard, trends, baseline progress, test guide
+    RunTest.jsx, Flow.jsx   Individual test selection and guided three-test flow
+    History.jsx            Saved results, deletion, CSV download
+    Privacy.jsx            Consent screen and privacy notice
+  tests/
+    registry.js            Test definitions and phone/laptop eye result variants
+    balance/               Motion capture, stance scoring, test UI
+    reaction/              Tap timing, reaction metrics, test UI
+    eye/                   Camera landmarks, calibration, pursuit scoring, plots
+  lib/
+    firebase.js            Firebase initialization and offline persistence
+    session.js             Live state, team/trial writes, published cutoffs
+    baseline.js, status.js  Baseline comparisons, CSV export, overall calls
+    alerts.js, invite.js    Coach alert grouping and join-link handling
+    cues.js, focus.js       Speech/audio/vibration and test focus behavior
+  components/              Result cards, trends, alerts, QR codes, shared UI
+shared/
+  assess.js                Shared scoring definitions and cutoff calculation
 ```
-src/App.jsx                  name gate + tabs (Overview, 4 tests, History)
-src/pages/Overview.jsx       dashboard: overall status, per-test cards + trends, test guide
-src/pages/History.jsx        every saved result by date/time, delete, CSV export
-src/tests/registry.js        one entry per test: metrics, headline metric, what it's for
-src/lib/baseline.js          storage, baseline mean/SD, comparison, CSV export
-src/lib/status.js            combines per-test results into one overall call
-src/components/              ResultCards, SaveTrial, Trend
-src/tests/symptoms/          22-symptom checklist, 0-6 each (SCAT format)
-src/tests/balance/           3 stances x 20 s, eyes closed, phone accelerometer + examiner errors
-src/tests/reaction/          3 practice + 15 scored taps
-src/tests/eye/               webcam iris tracking, smooth-pursuit metrics
-```
 
-## Where data is stored
-In the browser's localStorage on the device running the app. Nothing is uploaded, so
-each phone/laptop has its own records and clearing browser data erases them. The
-History tab exports CSV (one athlete or all) for backups and analysis.
+## Next steps and limitations
 
-## Adding a test
-1. Build the UI in `src/tests/<name>/`. Produce one flat object of numbers per trial, e.g. `{ medianMs: 284, iqrMs: 41 }`.
-2. Export a spec saying which direction is worse, plus a plain-English `explain` and optional `rate(value)` guide:
-   `{ medianMs: { label: 'Median RT', unit: 'ms', worse: 'higher', digits: 0 } }`
-   (`worse` is `'higher'`, `'lower'`, or `'away'` for any change from baseline).
-3. Save with `addTrial(athlete, '<name>', 'baseline' | 'check', metrics)`.
-4. For a check, call `compare(athlete, '<name>', metrics, spec)` **before** saving it, and render `<ResultCards metrics spec comparison />`.
-
-See `src/tests/eye/EyeTest.jsx` for the full pattern.
-
-## Positioning
-A **screening tool, not a diagnosis**: it tells a coach without a trainer when to pull an athlete and get them seen.
-
-## Team roles
-1. **Eye tracking:** MediaPipe, calibration, pursuit metrics, eye-vs-dot graph.
-2. **Balance + reaction:** sensor capture, sway and reaction metrics.
-3. **App flow + UI:** profiles, baseline storage, test flow, results screen.
-4. **Pitch + writeup:** 1–4 page writeup, README, repeatability data from volunteers, backup demo video.
-
-## Timeline
-| By | Done |
-|---|---|
-| 6 PM Sat | Symptoms + balance + reaction working end to end |
-| 2 AM | Eye tracking producing the eye-vs-dot graph |
-| 8 AM | All tests feed one combined result; volunteer baselines recorded |
-| 10 AM | Feature freeze, writeup, backup demo video |
-| 12 PM Sun | Submit on Devpost |
-
-## Pitch (3 min)
-1. **Hook:** A volunteer coach sees a kid take a hit. Should they go back in? Right now, that call is a guess.
-2. **Gap:** validated tools need trainers or expensive hardware; many youth sidelines have neither.
-3. **Live demo:** baseline → teammate spins ~10 times → retest → balance flag fires. Then the eye test with the eye-vs-dot graph.
-4. **Proof:** test-retest repeatability across volunteers.
-5. **Business + next steps:** free for teams, paid dashboards for districts and leagues; validation study against clinician assessment, then FDA clearance as a screening aid.
+- **Clinical validation:** measure repeatability and compare screening calls with clinician assessments before claiming diagnostic accuracy or effectiveness.
+- **Trusted scoring:** move teammate-check scoring to a Cloud Function so a tampered phone cannot submit a fabricated status. Current rules validate access and data shape, not the calculation.
+- **Multiple teams per athlete/coach (in progress):** the current schema and rules support one team per account.
+- **Measurement quality:** device latency, lighting, head motion, sensor support, fatigue, and test setup can affect results. Keep baseline and check conditions consistent. Skipped tests or missing metrics reduce what the overall call covers.

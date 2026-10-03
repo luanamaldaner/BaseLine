@@ -69,7 +69,7 @@ const STEPS = [
 // their settings as plain objects, so a short run is a matter of overriding
 // them once before anything starts.
 if (new URLSearchParams(window.location.search).has('quick')) {
-  Object.assign(REACTION, { practice: 1, trials: 5 });
+  Object.assign(REACTION, { practice: 1, trials: 5, minValid: 4 });
   Object.assign(PURSUIT, { moveMs: 6000 });
   CALIBRATION.points = [0.2, 0.5, 0.8];
   Object.assign(BALANCE, { durationMs: 8000, countdownS: 3 });
