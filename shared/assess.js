@@ -36,11 +36,11 @@ export const METRIC_KEYS = {
 };
 
 export const TEST_IDS = Object.keys(SPECS);
-// Baseline trials to record per test. The first is practice and is not
-// scored: the first attempt at an unfamiliar test is usually the worst, and a
-// bad first trial widens the baseline's spread and hides a later deficit.
-export const BASELINE_TRIALS = 4;
-export const PRACTICE_TRIALS = 1;
+// Baseline trials to record per test. All of them count toward the baseline.
+// (PRACTICE_TRIALS can drop leading trials from scoring if the team wants a
+// warm-up trial; it is 0 for now.)
+export const BASELINE_TRIALS = 3;
+export const PRACTICE_TRIALS = 0;
 const SCORED_MIN = BASELINE_TRIALS - PRACTICE_TRIALS;
 
 // With only a few baseline trials the SD is unreliable (often ~0), so never
@@ -58,8 +58,8 @@ const sd = (xs) => {
 // baselines: [{ at, metrics }] -> { n, recorded, stats } or null
 //   n:        trials actually scored (the practice trial dropped)
 //   recorded: trials on file, for progress displays
-// The practice trial is dropped only once more than the scored minimum is on
-// file, so an athlete with an older three-trial baseline keeps all three.
+// Leading practice trials (if any) are dropped only once more than the scored
+// minimum is on file, so a shorter baseline always keeps every trial.
 export function summarize(baselines) {
   if (!baselines.length) return null;
   const ordered = [...baselines].sort((a, b) => (a.at ?? '').localeCompare(b.at ?? ''));
