@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTestRunning } from '../../lib/focus.js';
+import { useTestRunning, useScreenTop } from '../../lib/focus.js';
 import { REACTION, METRICS, randomDelay, computeReaction } from './reaction.js';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { say } from '../../lib/cues.js';
@@ -153,6 +153,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
     return () => window.removeEventListener('keydown', onKey);
   });
 
+  useScreenTop(phase);
   useTestRunning(phase === 'running');
 
   return (

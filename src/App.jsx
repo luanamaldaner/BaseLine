@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useScreenTop } from './lib/focus.js';
+import { HomeIcon, HistoryIcon, BookIcon, SymptomsIcon, UsersIcon } from './components/Icons.jsx';
 import { useSession, logOut } from './lib/session.js';
 import AuthScreen from './pages/AuthScreen.jsx';
 import { ProfileSetup, TeamSetup } from './pages/Setup.jsx';
@@ -71,7 +73,7 @@ function nameMap(s) {
 
 // focus: a test screen. The test's own bar replaces the header, tabs, and
 // footer so the test gets the whole screen on a phone.
-function Frame({ s, tabs, tab, setTab, focus = false, children }) {
+function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
   const [privacy, setPrivacy] = useState(false);
   return (
     <div className={`app${focus ? ' focus' : ''}`}>
@@ -91,9 +93,15 @@ function Frame({ s, tabs, tab, setTab, focus = false, children }) {
             </div>
           </header>
           <nav className="tabs">
-            {tabs.map(([id, label]) => (
-              <button key={id} className={id === tab ? 'active' : ''} onClick={() => setTab(id)}>
-                {label}
+            {tabs.map(([id, label, shortLabel, Icon]) => (
+              <button key={id} className={id === tab ? 'active' : ''} aria-current={id === tab ? 'page' : undefined} onClick={() => setTab(id)}>
+                <span className="tab-desktop">{label}</span>
+                <span className="tab-phone">
+                  <span className="tab-icon"><Icon />{id === 'roster' && unread > 0 && (
+                    <span className="tab-badge" aria-label={unread + ' unread alerts'}>{unread}</span>
+                  )}</span>
+                  <span>{shortLabel}</span>
+                </span>
               </button>
             ))}
           </nav>
@@ -117,6 +125,7 @@ function AthleteApp({ s }) {
   const me = s.user.uid;
   const [tab, setTab] = usePersisted('tab:athlete', 'me');
   const [pick, setPick] = usePersisted('pick:athlete', { subjectUid: null, testId: null });
+  useScreenTop(tab);
   const members = [...s.members.values()].sort((a, b) => a.name.localeCompare(b.name));
   const people = [{ uid: me, name: s.profile.name }, ...members.filter((m) => m.uid !== me)];
   const openTest = (testId) => {
@@ -130,7 +139,7 @@ function AthleteApp({ s }) {
       tab={tab}
       focus={tab === 'test' && !!pick.subjectUid && !!pick.testId}
       setTab={(t) => { if (t === 'test') setPick({ subjectUid: null, testId: null }); setTab(t); }}
-      tabs={[['me', 'My dashboard'], ['test', 'Run a test'], ['history', 'My history'], ['team', 'Team'], ['learn', 'Learn more']]}
+      tabs={[['me', 'My dashboard', 'Dashboard', HomeIcon], ['test', 'Run a test', 'Test', SymptomsIcon], ['history', 'My history', 'History', HistoryIcon], ['team', 'Team', 'Team', UsersIcon], ['learn', 'Learn more', 'Learn', BookIcon]]}
     >
       {tab === 'me' && <Overview subjectUid={me} isSelf onOpenTest={openTest} />}
       {tab === 'test' && <RunTest people={people} selfUid={me} isCoach={false} pick={pick} setPick={setPick} />}
@@ -148,6 +157,7 @@ function CoachApp({ s }) {
   const [pick, setPick] = usePersisted('pick:coach', { subjectUid: null, testId: null });
   const members = [...s.members.values()].sort((a, b) => a.name.localeCompare(b.name));
   const names = nameMap(s);
+  useScreenTop(`${tab}:${player}:${playerTab}`);
   const selected = members.find((m) => m.uid === player);
   const alerts = useCoachAlerts(s.user.uid, names);
   const openPlayer = (uid) => { setPlayer(uid); setPlayerTab('dashboard'); setTab('roster'); };
@@ -167,13 +177,14 @@ function CoachApp({ s }) {
         if (t === 'test') setPick({ subjectUid: null, testId: null });
         setTab(t);
       }}
+      unread={alerts.unread.length}
       tabs={[
         ['roster', <>Home{alerts.unread.length > 0 && (
           <span className="tab-badge" aria-label={`${alerts.unread.length} unread alerts`}>{alerts.unread.length}</span>
-        )}</>],
-        ['test', 'Run a check'],
-        ['team', 'Team'],
-        ['learn', 'Learn more'],
+        )}</>, 'Home', HomeIcon],
+        ['test', 'Run a check', 'Check', SymptomsIcon],
+        ['team', 'Team', 'Team', UsersIcon],
+        ['learn', 'Learn more', 'Learn', BookIcon],
       ]}
     >
       {tab === 'roster' && !selected && (

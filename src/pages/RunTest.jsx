@@ -1,3 +1,4 @@
+import { useScreenTop } from '../lib/focus.js';
 import { TESTS, testById } from '../tests/registry.js';
 import Flow from './Flow.jsx';
 import { TestBadge } from '../components/Icons.jsx';
@@ -20,6 +21,7 @@ function TestBar({ title, who, onBack }) {
 // people: [{ uid, name }] the viewer may test. selfUid: the viewer if they're
 // an athlete (null for the coach). pick/setPick persist across reloads.
 export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
+  useScreenTop(`${pick.subjectUid}:${pick.testId}`);
   const subject = people.find((p) => p.uid === pick.subjectUid);
   const test = pick.testId && testById[pick.testId];
 

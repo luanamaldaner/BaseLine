@@ -1,3 +1,4 @@
+import { useScreenTop, useTestRunning } from '../../lib/focus.js';
 import { useEffect, useRef, useState } from 'react';
 import { createLandmarker, openCamera, startTracking, EYES } from './faceTracker.js';
 import {
@@ -39,6 +40,7 @@ export function detectDevice() {
 export default function EyeTest(props) {
   const [device, setDevice] = useState(detectDevice);
   const [open, setOpen] = useState(false);
+  useScreenTop(`${device}:${open}`);
   const { test, tips, label } = EYE_DEVICES[device];
   const { subject, canSeeData } = props;
 
@@ -109,6 +111,8 @@ function EyeScan({
   const [live, setLive] = useState(null);
   const [result, setResult] = useState(null);
   const [runId, setRunId] = useState(0); // fresh save buttons per run
+
+  useTestRunning(phase === 'calibrate' || phase === 'pursuit');
 
   const setPhase = (p) => {
     phaseRef.current = p;

@@ -135,3 +135,13 @@ export function StanceDiagram({ id, size = 140 }) {
     </svg>
   );
 }
+
+export const HomeIcon = (p) => (
+  <Svg {...p}><path d="M3 10l9-7 9 7v11h-6v-7H9v7H3z" {...stroke} /></Svg>
+);
+export const HistoryIcon = (p) => (
+  <Svg {...p}><g {...stroke}><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></g></Svg>
+);
+export const BookIcon = (p) => (
+  <Svg {...p}><path d="M12 5v16M12 5C9 3 5 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-3-1-7-1-10 1z" {...stroke} /></Svg>
+);

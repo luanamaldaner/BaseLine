@@ -1,3 +1,4 @@
+import { useScreenTop } from '../lib/focus.js';
 import { useEffect, useRef, useState } from 'react';
 import { testById } from '../tests/registry.js';
 import { REACTION } from '../tests/reaction/reaction.js';
@@ -88,6 +89,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
   const startedRef = useRef(false); // a start has been issued for this ready screen
   const advancedRef = useRef(-1); // last step index that was advanced past
 
+  useScreenTop(`${stepIdx}:${stage}:${attempt}`);
   const step = STEPS[stepIdx];
   const test = testById[step.id];
 

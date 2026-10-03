@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTestRunning } from '../../lib/focus.js';
+import { useTestRunning, useScreenTop } from '../../lib/focus.js';
 import { STANCES, BALANCE, METRICS, computeBalance } from './balance.js';
 import { formatMetric } from '../../components/ResultCards.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
@@ -169,6 +169,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
 
   const stance = STANCES[stanceIdx];
 
+  useScreenTop(`${phase}:${stanceIdx}`);
   useTestRunning(phase === 'countdown' || phase === 'recording');
 
   return (
