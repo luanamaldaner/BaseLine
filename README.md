@@ -60,17 +60,23 @@ The face model ships in `public/models/`, so the app works offline.
 
 ## Code layout
 ```
-src/lib/baseline.js          per-athlete trials, baseline mean/SD, z-score comparison
-src/components/ResultCards   plain-language result cards + Normal / Monitor / Refer banner
-src/components/SaveTrial     save as baseline / post-hit check, baseline progress
-src/tests/eye/               eye pursuit (working)
-  faceTracker.js             webcam -> MediaPipe -> iris position within each eye
-  pursuit.js                 dot motion, calibration fit, gain / lag / saccade metrics
-  EyeTest.jsx, TracePlot.jsx UI + eye-vs-dot graph
-src/tests/balance/           TODO
-src/tests/reaction/          reaction time (working)
-src/tests/symptoms/          TODO
+src/App.jsx                  name gate + tabs (Overview, 4 tests, History)
+src/pages/Overview.jsx       dashboard: overall status, per-test cards + trends, test guide
+src/pages/History.jsx        every saved result by date/time, delete, CSV export
+src/tests/registry.js        one entry per test: metrics, headline metric, what it's for
+src/lib/baseline.js          storage, baseline mean/SD, comparison, CSV export
+src/lib/status.js            combines per-test results into one overall call
+src/components/              ResultCards, SaveTrial, Trend
+src/tests/symptoms/          22-symptom checklist, 0-6 each (SCAT format)
+src/tests/balance/           3 stances x 20 s, eyes closed, phone accelerometer + examiner errors
+src/tests/reaction/          3 practice + 15 scored taps
+src/tests/eye/               webcam iris tracking, smooth-pursuit metrics
 ```
+
+## Where data is stored
+In the browser's localStorage on the device running the app. Nothing is uploaded, so
+each phone/laptop has its own records and clearing browser data erases them. The
+History tab exports CSV (one athlete or all) for backups and analysis.
 
 ## Adding a test
 1. Build the UI in `src/tests/<name>/`. Produce one flat object of numbers per trial, e.g. `{ medianMs: 284, iqrMs: 41 }`.

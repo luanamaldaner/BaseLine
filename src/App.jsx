@@ -1,24 +1,28 @@
 import { useState } from 'react';
 import { listAthletes } from './lib/baseline.js';
-import EyeTest from './tests/eye/EyeTest.jsx';
-import BalanceTest from './tests/balance/BalanceTest.jsx';
-import ReactionTest from './tests/reaction/ReactionTest.jsx';
-import SymptomsTest from './tests/symptoms/SymptomsTest.jsx';
+import { TESTS } from './tests/registry.js';
+import Overview from './pages/Overview.jsx';
+import History from './pages/History.jsx';
 
 const TABS = [
-  { id: 'symptoms', label: 'Symptoms', Component: SymptomsTest },
-  { id: 'balance', label: 'Balance', Component: BalanceTest },
-  { id: 'reaction', label: 'Reaction', Component: ReactionTest },
-  { id: 'eye', label: 'Eye pursuit', Component: EyeTest },
+  { id: 'overview', label: 'Overview' },
+  ...TESTS.map((t) => ({ id: t.id, label: t.label })),
+  { id: 'history', label: 'History' },
 ];
 
 export default function App() {
-  const [tab, setTab] = useState('eye');
+  const [tab, setTab] = useState('overview');
   const [athlete, setAthlete] = useState('');
 
-  if (!athlete) return <NameGate onContinue={setAthlete} />;
+  if (!athlete) {
+    return <NameGate onContinue={(name) => { setAthlete(name); setTab('overview'); }} />;
+  }
 
-  const { Component } = TABS.find((t) => t.id === tab);
+  const test = TESTS.find((t) => t.id === tab);
+  let page;
+  if (tab === 'overview') page = <Overview athlete={athlete} onOpenTest={setTab} />;
+  else if (tab === 'history') page = <History athlete={athlete} onAthleteDeleted={() => setAthlete('')} />;
+  else page = <test.Component athlete={athlete} />;
 
   return (
     <div className="app">
@@ -46,10 +50,8 @@ export default function App() {
         ))}
       </nav>
 
-      <main>
-        {/* key: remount per athlete so no state leaks between people */}
-        <Component key={athlete} athlete={athlete} />
-      </main>
+      {/* key: remount per athlete and tab so pages always read fresh data */}
+      <main key={`${athlete}:${tab}`}>{page}</main>
 
       <footer className="muted small">
         Screening tool, not a diagnosis. Any athlete with a suspected concussion should be

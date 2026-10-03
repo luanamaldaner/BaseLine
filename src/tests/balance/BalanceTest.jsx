@@ -1,14 +1,306 @@
-import TodoTest from '../../components/TodoTest.jsx';
+import { useEffect, useRef, useState } from 'react';
+import { STANCES, BALANCE, METRICS, computeBalance } from './balance.js';
+import { compare, summarizeBaseline } from '../../lib/baseline.js';
+import ResultCards, { formatMetric } from '../../components/ResultCards.jsx';
+import SaveTrial, { BaselineProgress, NoBaselineNote } from '../../components/SaveTrial.jsx';
 
-// TODO(balance owner): DeviceMotion capture, phone held flat to the chest.
-// 3 stances x 20 s, eyes closed. On iOS, call DeviceMotionEvent.requestPermission()
-// from a button tap before listening. Needs HTTPS on a phone: `npm run dev:phone`.
-export default function BalanceTest() {
+const TEST = 'balance';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// --- audio + speech cues (eyes are closed, so the screen can't be the cue) ---
+let audioCtx = null;
+function beep(freq = 880, ms = 180) {
+  try {
+    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.frequency.value = freq;
+    gain.gain.value = 0.2;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + ms / 1000);
+  } catch {
+    /* no audio: the screen still shows the timer */
+  }
+}
+function say(text) {
+  try {
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  } catch {
+    /* speech unsupported */
+  }
+}
+const buzz = (ms) => navigator.vibrate?.(ms);
+
+async function requestMotionPermission() {
+  // iOS needs an explicit permission prompt from a tap.
+  const DME = window.DeviceMotionEvent;
+  if (DME && typeof DME.requestPermission === 'function') {
+    const res = await DME.requestPermission();
+    if (res !== 'granted') throw new Error('Motion sensor permission was denied.');
+  }
+}
+
+export default function BalanceTest({ athlete }) {
+  const sinkRef = useRef(null);
+  const pendingRef = useRef(null); // samples of the stance just finished
+  const abortRef = useRef(false);
+  const lastEventRef = useRef(0);
+  const wakeRef = useRef(null);
+  const [phase, setPhase] = useState('intro'); // intro | ready | countdown | recording | errors | results
+  const [stanceIdx, setStanceIdx] = useState(0);
+  const [count, setCount] = useState(0);
+  const [errorsSeen, setErrorsSeen] = useState(0);
+  const [error, setError] = useState(null);
+  const [result, setResult] = useState(null);
+  const [runId, setRunId] = useState(0);
+  const dataRef = useRef({});
+
+  // One motion listener for the life of the component.
+  useEffect(() => {
+    const onMotion = (e) => {
+      const a = e.accelerationIncludingGravity;
+      if (!a || a.x == null) return;
+      lastEventRef.current = performance.now();
+      sinkRef.current?.({ t: e.timeStamp, a: [a.x, a.y, a.z] });
+    };
+    window.addEventListener('devicemotion', onMotion);
+    return () => {
+      window.removeEventListener('devicemotion', onMotion);
+      abortRef.current = true;
+      wakeRef.current?.release?.().catch(() => {});
+    };
+  }, []);
+
+  async function begin() {
+    setError(null);
+    try {
+      await requestMotionPermission();
+    } catch (e) {
+      setError(e.message);
+      return;
+    }
+    beep(660, 1); // unlocks audio on mobile while we still have the tap
+    try {
+      wakeRef.current = await navigator.wakeLock?.request('screen');
+    } catch {
+      /* screen may dim; not fatal */
+    }
+    // Make sure the sensor is actually producing readings.
+    const t = performance.now();
+    await sleep(1200);
+    if (lastEventRef.current < t) {
+      setError(
+        'No motion sensor found. Open this page on a phone (run "npm run dev:phone" and use the https:// address it prints).',
+      );
+      return;
+    }
+    dataRef.current = {};
+    abortRef.current = false;
+    setResult(null);
+    setStanceIdx(0);
+    setPhase('ready');
+  }
+
+  async function runStance() {
+    const stance = STANCES[stanceIdx];
+    abortRef.current = false;
+    setPhase('countdown');
+    say('Close your eyes when you hear the beep.');
+    for (let s = BALANCE.countdownS; s > 0; s--) {
+      setCount(s);
+      await sleep(1000);
+      if (abortRef.current) return;
+    }
+    // Go
+    const samples = [];
+    let t0 = null;
+    sinkRef.current = (s) => {
+      t0 ??= s.t;
+      samples.push({ t: s.t - t0, a: s.a });
+    };
+    beep(880, 300);
+    buzz(200);
+    setPhase('recording');
+    const start = performance.now();
+    while (performance.now() - start < BALANCE.durationMs) {
+      setCount(Math.ceil((BALANCE.durationMs - (performance.now() - start)) / 1000));
+      await sleep(200);
+      if (abortRef.current) {
+        sinkRef.current = null;
+        return;
+      }
+    }
+    sinkRef.current = null;
+    beep(880, 150);
+    await sleep(220);
+    beep(880, 150);
+    buzz([150, 80, 150]);
+    say('Stop. Open your eyes.');
+
+    pendingRef.current = samples;
+    setErrorsSeen(0);
+    setPhase('errors');
+  }
+
+  // Examiner enters what they saw, then on to the next stance.
+  function confirmErrors() {
+    dataRef.current[stance.id] = { samples: pendingRef.current, taps: errorsSeen };
+    pendingRef.current = null;
+    if (stanceIdx + 1 < STANCES.length) {
+      setStanceIdx(stanceIdx + 1);
+      setPhase('ready');
+    } else {
+      finish();
+    }
+  }
+
+  function finish() {
+    wakeRef.current?.release?.().catch(() => {});
+    const r = computeBalance(dataRef.current);
+    const comparison = r.ok && summarizeBaseline(athlete, TEST)
+      ? compare(athlete, TEST, r.metrics, METRICS)
+      : null;
+    setResult({ ...r, comparison });
+    setRunId((n) => n + 1);
+    setPhase('results');
+  }
+
+  function stop() {
+    abortRef.current = true;
+    sinkRef.current = null;
+    speechSynthesis?.cancel?.();
+    wakeRef.current?.release?.().catch(() => {});
+    setPhase('intro');
+  }
+
+  const stance = STANCES[stanceIdx];
+
   return (
-    <TodoTest
-      title="Balance"
-      description="Phone held flat against the chest. Feet together, single leg, heel-to-toe; 20 seconds each, eyes closed."
-      spec={['Sway RMS per stance (m/s²)', 'Sway path length', 'Jerk']}
-    />
+    <section className="test">
+      <header className="test-head">
+        <h2>Balance</h2>
+        <p className="muted">
+          Three stances, 20 seconds each, eyes closed, phone held flat against the chest. The
+          phone measures sway; an examiner watches and counts errors.
+        </p>
+      </header>
+
+      {error && <div className="callout danger">{error}</div>}
+
+      {phase === 'intro' && (
+        <div className="panel balance-intro">
+          <ol className="tips">
+            <li>Shoes off, firm floor. The athlete holds the phone flat against their chest with both hands.</li>
+            <li>Turn the sound up: a beep and a voice say when to close and open the eyes.</li>
+            <li>
+              An examiner watches and counts errors: opening the eyes, stepping or stumbling,
+              lifting the forefoot or heel, or moving the hands off the chest. They enter the
+              count after each stance.
+            </li>
+          </ol>
+          <div className="row">
+            <button className="primary" onClick={begin}>Start test</button>
+          </div>
+          <BaselineProgress athlete={athlete} test={TEST} />
+        </div>
+      )}
+
+      {phase === 'ready' && (
+        <div className="panel balance-stage">
+          <p className="muted small">Stance {stanceIdx + 1} of {STANCES.length}</p>
+          <h3 className="stance-title">{stance.label}</h3>
+          <p>{stance.how}</p>
+          <p className="muted">
+            Hold the phone flat against your chest. After you press start you have{' '}
+            {BALANCE.countdownS} seconds to get in position; close your eyes at the beep.
+          </p>
+          <div className="row">
+            <button className="primary big-btn" onClick={runStance}>Start stance</button>
+            <button className="ghost" onClick={stop}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {(phase === 'countdown' || phase === 'recording') && (
+        <div className={`balance-live ${phase}`}>
+          <p className="muted">{stance.label}</p>
+          <div className="balance-count">{count}</div>
+          <p>{phase === 'countdown' ? 'Get in position…' : 'Eyes closed. Stay still.'}</p>
+          <button className="ghost small-btn" onClick={stop}>Stop test</button>
+        </div>
+      )}
+
+      {phase === 'errors' && (
+        <div className="panel balance-stage">
+          <p className="muted small">Stance {stanceIdx + 1} of {STANCES.length} done</p>
+          <h3 className="stance-title">Errors the examiner saw</h3>
+          <p className="muted">
+            Eyes opened, a step or stumble, forefoot or heel lifted, hands off the chest. The
+            phone adds big stumbles it felt on its own.
+          </p>
+          <div className="stepper">
+            <button onClick={() => setErrorsSeen((n) => Math.max(0, n - 1))} aria-label="One fewer">−</button>
+            <span>{errorsSeen}</span>
+            <button onClick={() => setErrorsSeen((n) => Math.min(10, n + 1))} aria-label="One more">+</button>
+          </div>
+          <div className="row">
+            <button className="primary big-btn" onClick={confirmErrors}>
+              {stanceIdx + 1 < STANCES.length ? 'Next stance' : 'See results'}
+            </button>
+            <button className="ghost" onClick={stop}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {phase === 'results' && result && (
+        <div className="results">
+          {!result.ok ? (
+            <div className="callout danger">Test didn't work: {result.reason} Run it again.</div>
+          ) : (
+            <>
+              {!result.comparison && <NoBaselineNote athlete={athlete} />}
+              <ResultCards metrics={result.metrics} spec={METRICS} comparison={result.comparison} />
+              <StanceBars stances={result.stances} />
+              <SaveTrial
+                key={runId}
+                athlete={athlete}
+                test={TEST}
+                metrics={result.metrics}
+                onDiscard={() => { setResult(null); setPhase('intro'); }}
+              />
+            </>
+          )}
+          <div className="row">
+            <button className="ghost" onClick={begin}>Run again</button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StanceBars({ stances }) {
+  const max = Math.max(...STANCES.map((s) => stances[s.id].sway));
+  return (
+    <div className="panel">
+      <h3>By stance</h3>
+      <p className="muted small">Sway on each stance. Longer bar = more sway.</p>
+      {STANCES.map((s) => {
+        const st = stances[s.id];
+        return (
+          <div className="stance-row" key={s.id}>
+            <span>{s.label}</span>
+            <div className="stance-track">
+              <div style={{ width: `${(st.sway / max) * 100}%` }} />
+            </div>
+            <span className="stance-val">
+              {formatMetric(st.sway, METRICS.sway)} · {st.errors} error{st.errors === 1 ? '' : 's'}
+            </span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

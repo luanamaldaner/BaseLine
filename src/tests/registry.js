@@ -1,0 +1,68 @@
+// Every test in one place: its metrics, its headline metric for trend charts,
+// and what it's for. The Overview and History pages read from this.
+
+import { METRICS as SYMPTOM_METRICS } from './symptoms/symptoms.js';
+import { METRICS as BALANCE_METRICS } from './balance/balance.js';
+import { METRICS as REACTION_METRICS } from './reaction/reaction.js';
+import { METRICS as EYE_METRICS } from './eye/pursuit.js';
+import SymptomsTest from './symptoms/SymptomsTest.jsx';
+import BalanceTest from './balance/BalanceTest.jsx';
+import ReactionTest from './reaction/ReactionTest.jsx';
+import EyeTest from './eye/EyeTest.jsx';
+
+export const TESTS = [
+  {
+    id: 'symptoms',
+    label: 'Symptoms',
+    Component: SymptomsTest,
+    metrics: SYMPTOM_METRICS,
+    headline: 'severity',
+    time: '2 min',
+    device: 'Any',
+    measures: 'What the athlete feels: 22 symptoms like headache, dizziness, and feeling foggy.',
+    system: 'Self-report',
+    bestAt: 'The most common sign of concussion, and usually the first thing to change after a hit.',
+    limits: 'Only as honest as the athlete. Players who want to stay in the game often under-report.',
+  },
+  {
+    id: 'balance',
+    label: 'Balance',
+    Component: BalanceTest,
+    metrics: BALANCE_METRICS,
+    headline: 'sway',
+    time: '2 min',
+    device: 'Phone',
+    measures: 'How steady the athlete stands with eyes closed, in three stances.',
+    system: 'Inner ear (vestibular) and body-position sense',
+    bestAt: 'An objective sign that is hard to fake. Balance problems are common in the first days after a concussion.',
+    limits: 'Balance often recovers within a few days, so a normal result later does not mean the brain has healed. Fatigue and leg injuries also affect it.',
+  },
+  {
+    id: 'reaction',
+    label: 'Reaction time',
+    Component: ReactionTest,
+    metrics: REACTION_METRICS,
+    headline: 'medianMs',
+    time: '1 min',
+    device: 'Phone or laptop',
+    measures: 'How fast the brain notices a signal and responds.',
+    system: 'Processing speed and attention',
+    bestAt: 'Slowed thinking the athlete may not notice. In studies it can stay slow after symptoms have cleared.',
+    limits: 'Different devices give different times, so always use the same kind. Sleep, effort, and practice shift it too.',
+  },
+  {
+    id: 'eye',
+    label: 'Eye pursuit',
+    Component: EyeTest,
+    metrics: EYE_METRICS,
+    headline: 'onTarget',
+    time: '1 min',
+    device: 'Laptop webcam',
+    measures: 'How smoothly the eyes follow a moving dot.',
+    system: 'Eye-movement control, closely linked to the inner ear',
+    bestAt: 'Visual problems behind complaints like blurry vision or trouble reading, which symptom lists can miss. Hard to fake.',
+    limits: 'A webcam is noisier than a clinical eye tracker. Lighting, glasses, and head movement all affect it.',
+  },
+];
+
+export const testById = Object.fromEntries(TESTS.map((t) => [t.id, t]));
