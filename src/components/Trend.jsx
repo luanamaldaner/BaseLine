@@ -52,9 +52,10 @@ export default function Trend({ trials, metric, def, band }) {
             <b>{formatMetric(h.metrics[metric], def)} {def.unit}</b>
           </span>
         ) : (
-          <span className="muted">
-            <i className="key baseline" />baseline<i className="key check" />check
-            {band && <><i className="key band" />usual</>}
+          <span className="trend-legend muted">
+            <span className="legend-item"><i className="key baseline" />baseline</span>
+            <span className="legend-item"><i className="key check" />check</span>
+            {band && <span className="legend-item"><i className="key band" />usual</span>}
           </span>
         )}
       </div>
