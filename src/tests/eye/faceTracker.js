@@ -22,7 +22,10 @@ const BLINK_THRESHOLD = 0.45;
 
 export async function createLandmarker() {
   const fileset = await FilesetResolver.forVisionTasks(WASM_PATH);
-  const options = { runningMode: 'VIDEO', numFaces: 1, outputFaceBlendshapes: true };
+  // Two faces, not one: with numFaces 1 the model silently tracks whichever
+  // face it's most sure of, which on a crowded sideline can be the teammate
+  // leaning in. Asking for two lets the test notice and refuse to start.
+  const options = { runningMode: 'VIDEO', numFaces: 2, outputFaceBlendshapes: true };
   try {
     return await FaceLandmarker.createFromOptions(fileset, {
       ...options,
@@ -86,7 +89,7 @@ function headYaw(lm, w, h) {
 function toSample(result, t, w, h) {
   const lm = result.faceLandmarks?.[0];
   if (!lm) {
-    return { t, face: false, h: NaN, v: NaN, eyeDiff: NaN, yaw: NaN, blink: false, lm: null };
+    return { t, face: false, faces: 0, h: NaN, v: NaN, eyeDiff: NaN, yaw: NaN, blink: false, lm: null };
   }
   const eyes = EYES.map((e) => eyeRatio(lm, e, w, h));
   const blink =
@@ -102,8 +105,42 @@ function toSample(result, t, w, h) {
     eyeDiff: eyes[0].h - eyes[1].h,
     yaw: headYaw(lm, w, h),
     blink,
+    faces: result.faceLandmarks.length,
+    // Outer eye corner to outer eye corner, in camera pixels: too few and the
+    // iris is only a handful of pixels wide (athlete too far away).
+    eyeSpanPx: Math.hypot((lm[263].x - lm[33].x) * w, (lm[263].y - lm[33].y) * h),
+    nose: { x: lm[NOSE_TIP].x * w, y: lm[NOSE_TIP].y * h },
     lm,
   };
+}
+
+// Lighting, from a small copy of the frame: the face's average brightness,
+// and the whole frame's. Dark face = too dim; face much darker than the
+// frame = backlit (a bright sky or window behind them). 0-255.
+let lightCanvas = null;
+export function measureLight(video, lm) {
+  const W = 64, H = 36;
+  lightCanvas ??= document.createElement('canvas');
+  lightCanvas.width = W;
+  lightCanvas.height = H;
+  const ctx = lightCanvas.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, W, H);
+  const px = ctx.getImageData(0, 0, W, H).data;
+  let x0 = W, y0 = H, x1 = 0, y1 = 0;
+  for (const p of lm) {
+    x0 = Math.min(x0, p.x * W); x1 = Math.max(x1, p.x * W);
+    y0 = Math.min(y0, p.y * H); y1 = Math.max(y1, p.y * H);
+  }
+  let face = 0, nFace = 0, all = 0;
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const lum = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2];
+      all += lum;
+      if (x >= x0 && x <= x1 && y >= y0 && y <= y1) { face += lum; nFace++; }
+    }
+  }
+  return { face: nFace ? face / nFace : NaN, scene: all / (W * H) };
 }
 
 // Runs the landmarker on every new video frame and hands each sample to

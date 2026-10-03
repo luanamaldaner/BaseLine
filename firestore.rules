@@ -77,6 +77,24 @@ service cloud.firestore {
       return data.keys().hasAll(fields) && data.keys().hasOnly(fields);
     }
 
+    // Required fields, plus the optional testing-conditions tag.
+    function hasTrialFields(data, fields) {
+      return data.keys().hasAll(fields) && data.keys().hasOnly(fields.concat(['conditions'])) &&
+        (!('conditions' in data) || isValidConditions(data.conditions));
+    }
+
+    // Where and how a test was run, so a confound can be spotted later.
+    //   rested: bool (15+ min since playing/exercise)
+    //   place: 'quiet' | 'sideline'   light: 'indoor' | 'shade' | 'sun'
+    //   device: 'phone' | 'laptop'
+    function isValidConditions(c) {
+      return c is map && c.keys().hasOnly(['rested', 'place', 'light', 'device']) &&
+        (!('rested' in c) || c.rested is bool) &&
+        (!('place' in c) || c.place in ['quiet', 'sideline']) &&
+        (!('light' in c) || c.light in ['indoor', 'shade', 'sun']) &&
+        (!('device' in c) || c.device in ['phone', 'laptop']);
+    }
+
     function validName(s) {
       return s is string && s.size() >= 1 && s.size() <= 60;
     }
@@ -149,7 +167,7 @@ service cloud.firestore {
 
     // Your own baseline.
     function isValidOwnBaseline(d) {
-      return hasExactFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics']) &&
+      return hasTrialFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics']) &&
         d.subjectUid == request.auth.uid &&
         d.kind == 'baseline' &&
         isValidTrialBase(d);
@@ -157,7 +175,7 @@ service cloud.firestore {
 
     // A post-hit check on any athlete on the team.
     function isValidCheck(teamId, d) {
-      return hasExactFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics', 'status']) &&
+      return hasTrialFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics', 'status']) &&
         d.kind == 'check' &&
         d.status in ['normal', 'monitor', 'refer', 'no-baseline'] &&
         d.subjectUid is string &&

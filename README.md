@@ -66,6 +66,30 @@ The [overall call](src/lib/status.js) is Refer if any included test is Refer or 
 
 **This is a screening tool, not a diagnosis. The cutoffs are not clinically validated yet.** A normal result cannot rule out concussion or clear an athlete to return to play. Anyone with a suspected concussion should be removed from play and evaluated by a clinician regardless of the app's call. A clinical validation study is the next step.
 
+## Testing protocol (and why)
+
+Every result is compared to the athlete's **own baseline**, so anything that differs between the baseline and the check can look like a concussion. The protocol keeps conditions the same, and the app enforces or records what it can.
+
+**Set up a testing station.** A shaded, quiet spot with a firm floor and the athlete's back to the field: behind the bench or in the medical tent. They aren't watching the game, there's no crowd in the camera's view, and the light is consistent. **Record baselines in the same kind of spot**, on the same type of device.
+
+**Before every test the app asks three questions** ([ConditionsGate](src/components/ConditionsGate.jsx)), and saves the answers with each result:
+
+| Question | Why it matters | What the app does |
+|---|---|---|
+| Rested 15+ min since playing? | Hard exercise alone degrades balance and reaction time for about 15–20 minutes (documented for the BESS balance test). An athlete pulled straight off the field looks impaired because they just sprinted. | Offers a 15-minute rest timer; a baseline taken without rest gets a redo prompt. |
+| Quiet spot or loud sideline? | Noise distracts the athlete and can drown out audio cues. Noise doesn't affect the camera model. | Suggests moving behind the bench or into the tent. |
+| Indoors, shade, or direct sun? | Sun washes out the reaction screen and puts the face in shadow (bad for eye tracking). | Suggests moving into shade. |
+
+The device type (phone or laptop) is saved too. Flagged conditions show as tags in History and as columns in the CSV export, so we can later check which confounds actually moved the numbers.
+
+**Eye test camera checks** (before Start): one face in view (the model is asked for two faces so it can notice a bystander, and refuses to start if there are two), close enough to the camera, face well lit and not backlit, camera steady (propped up, not hand-held), facing the screen, and eyes open. A second face appearing mid-test triggers a "retest" warning.
+
+**Balance cues:** the phone is pressed to the chest, so on phones that can vibrate a long buzz means "close your eyes" and three short pulses mean "open them", with the beep and voice as backup. iPhone browsers don't support the vibration API; on iOS 18+ the app uses an unofficial workaround (toggling a hidden switch control, which plays a real haptic tick), so iPhones get a lighter tapping buzz. Because that could stop working in a future iOS, sound stays the main cue on iPhones: volume up, Silent mode and Do Not Disturb off.
+
+**Baseline sanity checks** ([lib/validity.js](src/lib/validity.js)): a baseline far worse than a healthy athlete usually scores (very slow reactions, eyes not keeping up with the dot, many balance errors) gets a "redo?" prompt before saving. A poor baseline, whether from a bad setup or deliberately doing badly ("sandbagging", a known problem with baseline tests), makes later checks look fine. The cutoffs are generous starting points to be tuned with volunteer data.
+
+**Other confounds to watch for** (not yet measured by the app): heat and dehydration, practice effects (the first baseline trial is often the worst), pain, fear, or an orthopedic injury, pre-existing conditions (ADHD, prior concussions, vestibular or vision problems), sleep, caffeine, medication, and age (re-baseline every season).
+
 ## Tech stack
 
 - **React + Vite** for the interface and build.
@@ -94,6 +118,8 @@ teams/{id}
   trials/{trialId}
     subjectUid, testerUid, test, kind: baseline | check, at, metrics
     status: normal | monitor | refer | no-baseline   # checks only
+    conditions?: { rested: bool, place: quiet | sideline,
+                   light: indoor | shade | sun, device: phone | laptop }
   ranges/{subjectUid}_{test}
     subjectUid, test, n
     limits: { metric: { worse: higher | lower, limit: number } }

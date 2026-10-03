@@ -1,6 +1,6 @@
 import { useScreenTop, useTestRunning } from '../../lib/focus.js';
 import { useEffect, useRef, useState } from 'react';
-import { createLandmarker, openCamera, startTracking, EYES } from './faceTracker.js';
+import { createLandmarker, openCamera, startTracking, measureLight, EYES } from './faceTracker.js';
 import {
   PURSUIT, CALIBRATION, METRICS, targetX, fitCalibration, frameIssue, computePursuit,
 } from './pursuit.js';
@@ -109,6 +109,9 @@ function EyeScan({
   const speakRef = useRef(false);
   speakRef.current = guided ? speak : readAloud;
   const [live, setLive] = useState(null);
+  const testingRef = useRef(false); // calibration or sweep running
+  const env = useRef({ frames: 0, multiFace: 0 }); // frames with a second face, during the test
+  const lastSample = useRef(null);
   const [result, setResult] = useState(null);
   const [runId, setRunId] = useState(0); // fresh save buttons per run
 
@@ -139,8 +142,23 @@ function EyeScan({
         landmarker = lm;
 
         let frames = 0, fpsStart = performance.now(), fps = 0, lastUi = 0, smoothH = NaN;
+        let lastLight = 0, light = null;
+        const noses = []; // last second of nose positions, for the shake check
         stop = startTracking(video, landmarker, (s) => {
           sinkRef.current?.(s);
+          lastSample.current = s;
+          if (testingRef.current) {
+            env.current.frames++;
+            if (s.faces > 1) env.current.multiFace++;
+          }
+          if (s.face) {
+            noses.push({ t: s.t, ...s.nose, span: s.eyeSpanPx });
+            while (noses.length && s.t - noses[0].t > 1000) noses.shift();
+            if (s.t - lastLight > 500) {
+              lastLight = s.t;
+              try { light = measureLight(video, s.lm); } catch { light = null; }
+            }
+          }
           frames++;
           if (s.t - fpsStart >= 1000) {
             fps = (frames * 1000) / (s.t - fpsStart);
@@ -155,7 +173,10 @@ function EyeScan({
           }
           if (s.t - lastUi > 100) {
             lastUi = s.t;
-            setLive({ face: s.face, h: smoothH, yaw: s.yaw, blink: s.blink, fps });
+            setLive({
+              face: s.face, h: smoothH, yaw: s.yaw, blink: s.blink, fps,
+              faces: s.faces, eyeSpanPx: s.eyeSpanPx, light, shake: shakeOf(noses),
+            });
           }
         });
         setStatus('ready');
@@ -216,7 +237,17 @@ function EyeScan({
   async function runTest() {
     // A second tap before the first render would run two tests over each other.
     if (runningRef.current) return;
+    // A second face means the tracker may follow the wrong person.
+    if (lastSample.current?.faces > 1) {
+      const reason = 'Two faces are in view. Ask anyone nearby to step out of the camera’s view, then try again.';
+      setResult({ ok: false, reason });
+      setPhase('results');
+      if (guided) onFinished?.({ ok: false, reason });
+      return;
+    }
     runningRef.current = true;
+    env.current = { frames: 0, multiFace: 0 };
+    testingRef.current = true;
     abortRef.current = false;
     setResult(null);
     setRunId((n) => n + 1);
@@ -283,9 +314,11 @@ function EyeScan({
 
       const r = computePursuit(samples, calib);
       // Compare against the baseline as it stands, before this trial is saved.
-      setResult({ ...r, calib });
+      testingRef.current = false;
+      const multiFacePct = env.current.frames ? (100 * env.current.multiFace) / env.current.frames : 0;
+      setResult({ ...r, calib, multiFacePct });
       setPhase('results');
-      if (guided) onFinished?.({ ...r, calib, testId: test });
+      if (guided) onFinished?.({ ...r, calib, multiFacePct, testId: test });
     } catch (e) {
       sinkRef.current = null;
       if (e.message === 'aborted') {
@@ -298,6 +331,7 @@ function EyeScan({
       }
     } finally {
       runningRef.current = false;
+      testingRef.current = false;
       setStageCount(null);
       setDotCountdown(false);
       hush();
@@ -457,17 +491,56 @@ function qualityWarnings(r) {
   if (pct(r.issues.face) > 10) out.push(`Face lost during ${pct(r.issues.face)}% of the test. Improve the lighting or move closer.`);
   if (pct(r.issues.blink) > 15) out.push(`Eyes closed during ${pct(r.issues.blink)}% of the test.`);
   if (pct(r.issues.glitch) > 15) out.push(`Tracker glitched during ${pct(r.issues.glitch)}% of the test. Try better light or removing glasses.`);
+  if (r.multiFacePct > 5) out.push('Someone else’s face came into view. The tracker may have followed the wrong person.');
   return out;
+}
+
+// Camera / environment checks before a scan. Each is [label, ok, how to fix].
+// Thresholds are starting points, tuned by eye on a laptop webcam and a phone.
+const MIN_EYE_SPAN_PX = 70; // ~60 cm from a 720p webcam; farther = too few iris pixels
+const MIN_FACE_LIGHT = 70; // 0-255 average brightness of the face
+const BACKLIGHT_GAP = 45; // face this much darker than the whole frame = light behind them
+const MAX_SHAKE = 0.12; // nose wobble over a second, in eye-widths
+
+function shakeOf(noses) {
+  if (noses.length < 10) return 0;
+  const mx = noses.reduce((a, n) => a + n.x, 0) / noses.length;
+  const my = noses.reduce((a, n) => a + n.y, 0) / noses.length;
+  const sd = Math.sqrt(noses.reduce((a, n) => a + (n.x - mx) ** 2 + (n.y - my) ** 2, 0) / noses.length);
+  const span = noses.reduce((a, n) => a + n.span, 0) / noses.length;
+  return span ? sd / span : 0;
+}
+
+export function cameraChecks(live) {
+  const face = !!live?.face;
+  const facing = face && Number.isFinite(live.yaw) && Math.abs(live.yaw) < 0.08;
+  const lit = live?.light;
+  const dim = face && lit && lit.face < MIN_FACE_LIGHT;
+  const backlit = face && lit && lit.scene - lit.face > BACKLIGHT_GAP;
+  return [
+    { id: 'face', label: 'We can see your face', ok: face, fix: 'Move into the frame and face the light.', required: true },
+    { id: 'one', label: 'Only one face in view', ok: face && live.faces === 1, fix: 'Ask anyone behind or beside them to step out of the camera’s view.', required: true },
+    { id: 'near', label: 'Close enough to the camera', ok: face && live.eyeSpanPx >= MIN_EYE_SPAN_PX, fix: 'Move a little closer to the screen.' },
+    { id: 'light', label: 'Face is well lit', ok: face && lit && !dim && !backlit,
+      fix: backlit ? 'There’s bright light behind them. Turn so they face the light, not the sky or a window.' : 'Too dark. Face a window or lamp, or move into brighter shade.' },
+    { id: 'steady', label: 'Camera and head are steady', ok: face && live.shake < MAX_SHAKE, fix: 'Prop the phone or laptop on something solid, and keep your head still.' },
+    { id: 'straight', label: 'Looking straight at the screen', ok: facing, fix: 'Turn your head so your nose points at the screen.' },
+    { id: 'eyes', label: 'Eyes open', ok: face && !live.blink, fix: 'Open your eyes wide; take glasses off if they glare.' },
+  ];
 }
 
 function LiveSignal({ live }) {
   if (!live) return <p className="muted">Waiting for camera…</p>;
   const pct = Number.isFinite(live.h) ? Math.min(Math.max(live.h, 0), 1) * 100 : null;
   const facing = Number.isFinite(live.yaw) && Math.abs(live.yaw) < 0.08;
+  const env = Object.fromEntries(cameraChecks(live).map((c) => [c.id, c.ok]));
   const rows = [
-    ['Face', live.face ? 'found' : 'not found', live.face],
+    ['Face', !live.face ? 'not found' : live.faces > 1 ? 'two faces in view' : 'found', live.face && live.faces === 1],
     ['Head', !live.face ? '—' : facing ? 'facing screen' : 'turn to face screen', live.face && facing],
     ['Eyes', !live.face ? '—' : live.blink ? 'closed' : 'open', live.face && !live.blink],
+    ['Distance', !live.face ? '—' : env.near ? 'good' : 'move closer', env.near],
+    ['Light', !live.face ? '—' : env.light ? 'good' : 'face the light', env.light],
+    ['Steady', !live.face ? '—' : env.steady ? 'yes' : 'prop it up', env.steady],
     ['Camera', live.fps ? `${live.fps.toFixed(0)} fps` : '…', live.fps >= 20],
   ];
   return (
@@ -586,15 +659,9 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
   const headingRef = useRef(null);
   useEffect(() => { headingRef.current?.focus(); }, [step, done]);
 
-  const face = !!live?.face;
-  const facing = face && Number.isFinite(live.yaw) && Math.abs(live.yaw) < 0.08;
-  const eyesOpen = face && !live.blink;
-  const checks = [
-    ['We can see your face', face, 'Move into the frame and face the light.'],
-    ['Looking straight at the screen', facing, 'Turn your head so your nose points at the screen.'],
-    ['Eyes open', eyesOpen, 'Open your eyes wide; take glasses off if they glare.'],
-  ];
-  const allGood = checks.every(([, ok]) => ok);
+  const checks = cameraChecks(live);
+  const allGood = checks.every((c) => c.ok);
+  const canGo = checks.filter((c) => c.required).every((c) => c.ok);
 
   if (done) {
     return (
@@ -638,12 +705,12 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
             <p className="muted">Starting the camera…</p>
           ) : (
             <ul className="guide-checks" aria-live="polite">
-              {checks.map(([label, ok, hint]) => (
-                <li key={label} className={ok ? 'ok' : ''}>
+              {checks.map(({ id, label, ok, fix }) => (
+                <li key={id} className={ok ? 'ok' : ''}>
                   <span className="check-mark" aria-hidden>{ok ? '✓' : ''}</span>
                   <span>
                     <b>{label}</b>
-                    {!ok && <span className="muted small"> {hint}</span>}
+                    {!ok && <span className="muted small"> {fix}</span>}
                     <span className="sr-only">{ok ? ': yes' : ': not yet'}</span>
                   </span>
                 </li>
@@ -651,10 +718,10 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
             </ul>
           )}
           <p className={allGood ? 'guide-ok' : 'muted small'}>
-            {allGood ? 'Looks great!' : 'The dots on the camera show where we see your eyes.'}
+            {allGood ? 'Looks great!' : canGo ? 'You can continue, but fixing the rest gives a cleaner result.' : 'The dots on the camera show where we see your eyes.'}
           </p>
           <div className="row">
-            <button className="primary big-btn" disabled={!ready || !face} onClick={() => setStep(2)}>Next</button>
+            <button className="primary big-btn" disabled={!ready || !canGo} onClick={() => setStep(2)}>Next</button>
             <button className="ghost" onClick={() => setStep(0)}>Back</button>
           </div>
         </>

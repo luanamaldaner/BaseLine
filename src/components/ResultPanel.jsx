@@ -3,6 +3,8 @@ import { compare, summarizeBaseline, BASELINE_TRIALS } from '../lib/baseline.js'
 import { saveBaseline, submitCheck } from '../lib/session.js';
 import { ACTIONS } from '../../shared/assess.js';
 import ResultCards from './ResultCards.jsx';
+import { useConditions } from '../lib/conditions.js';
+import { baselineConcerns } from '../lib/validity.js';
 
 // "Baseline: 2 of 3 trials recorded" (only for people allowed to see it).
 export function BaselineProgress({ subjectUid, test }) {
@@ -38,6 +40,8 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(null); // { kind: 'baseline' } | { kind: 'check', result }
+  const [concerns, setConcerns] = useState(null); // why this baseline looks off, before saving
+  const conditions = useConditions();
 
   const preview = canSeeData && summarizeBaseline(subject.uid, test) ? compare(subject.uid, test, metrics) : null;
 
@@ -45,7 +49,7 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
     setBusy(true);
     setError(null);
     try {
-      const result = await submitCheck(subject.uid, test, metrics);
+      const result = await submitCheck(subject.uid, test, metrics, conditions);
       setSaved({ kind: 'check', result });
     } catch (e) {
       setError(e?.message || 'Something went wrong. Try again.');
@@ -54,8 +58,16 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
     }
   }
 
-  function baseline() {
-    saveBaseline(test, metrics);
+  function baseline(force = false) {
+    if (!force) {
+      const c = [
+        ...(conditions?.rested === false ? ['They hadn’t rested since exercising, which drags scores down.'] : []),
+        ...baselineConcerns(test, metrics),
+      ];
+      if (c.length) return setConcerns(c);
+    }
+    setConcerns(null);
+    saveBaseline(test, metrics, conditions);
     setSaved({ kind: 'baseline' });
   }
 
@@ -104,9 +116,20 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
         </div>
       )}
       {error && <div className="callout danger">{error}</div>}
+      {concerns && (
+        <div className="callout warn concerns" role="alert">
+          <b>This doesn’t look like a typical healthy baseline.</b>
+          <ul>{concerns.map((c) => <li key={c}>{c}</li>)}</ul>
+          <span className="small">Baselines should be the athlete’s best effort: a poor one makes later checks look fine.</span>
+          <div className="row">
+            <button className="primary" onClick={onDiscard}>Redo the test</button>
+            <button className="ghost" onClick={() => baseline(true)}>Save anyway</button>
+          </div>
+        </div>
+      )}
       <div className="row">
         {isSelf && (
-          <button className="primary" onClick={baseline} disabled={busy}>
+          <button className="primary" onClick={() => baseline()} disabled={busy}>
             Save as baseline trial
           </button>
         )}
