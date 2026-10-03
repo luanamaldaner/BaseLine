@@ -5,6 +5,7 @@ import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } fro
 import { removeMember, leaveTeam } from '../lib/session.js';
 import { download } from './History.jsx';
 import Avatar from '../components/Avatar.jsx';
+import { AlertsPanel } from '../components/Alerts.jsx';
 import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
 
 const RANK = { refer: 0, monitor: 1, normal: 2, none: 3 };
@@ -26,7 +27,7 @@ function greeting() {
 
 // Coach home: a way straight into a check, team numbers, and everyone on the
 // team with flagged players first.
-export function Roster({ members, coachName, onOpen, onRunCheck }) {
+export function Roster({ members, coachName, onOpen, onRunCheck, alerts, names, onOpenPlayer }) {
   const rows = members
     .map((m) => ({ ...m, ...playerSummary(m.uid) }))
     .sort((a, b) => RANK[a.overall] - RANK[b.overall] || a.name.localeCompare(b.name));
@@ -40,6 +41,12 @@ export function Roster({ members, coachName, onOpen, onRunCheck }) {
 
   return (
     <section className="home-grid">
+      {alerts && (
+        <AlertsPanel
+          unread={alerts.unread} names={names} onOpen={onOpenPlayer}
+          onDismiss={alerts.dismiss} onDismissAll={alerts.dismissAll}
+        />
+      )}
       <div className="hero">
         <p className="eyebrow">{greeting()}{coachName ? `, ${coachName.split(' ')[0]}` : ''}</p>
         <h1>Someone took a hit?</h1>

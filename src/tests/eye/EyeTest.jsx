@@ -101,6 +101,7 @@ function EyeScan({
   const [phase, setPhaseState] = useState('preview'); // preview | calibrate | pursuit | results
   const [stageText, setStageText] = useState('');
   const [stageCount, setStageCount] = useState(null); // 3, 2, 1 before each part
+  const [dotCountdown, setDotCountdown] = useState(false); // ring around the dot before it moves
   const [readAloud, setReadAloud] = useState(false); // standalone speaker button
   const runningRef = useRef(false); // runTest in flight
   const speakRef = useRef(false);
@@ -244,11 +245,20 @@ function EyeScan({
       const calib = fitCalibration(calibPoints);
       if (!calib.ok) throw new Error(calib.reason);
 
-      // 2. Pursuit: follow the moving dot.
+      // 2. Pursuit: follow the moving dot. No text on screen here: the athlete
+      // is already looking at the dot, and reading would pull their eyes off
+      // it. A ring closing around the dot counts down instead (and the
+      // instruction is spoken if read-aloud is on).
       setPhase('pursuit');
-      moveDot(0.5);
-      await walkThrough('Now the dot will move. Follow it with your eyes only. Keep your head still.');
       setStageText('');
+      moveDot(0.5);
+      if (speakRef.current) say('Now follow the face with your eyes only. Keep your head still.');
+      await sleep(1200);
+      checkAbort();
+      setDotCountdown(true);
+      await sleep(3000);
+      setDotCountdown(false);
+      checkAbort();
       await sleep(PURSUIT.holdMs);
       checkAbort();
 
@@ -285,6 +295,7 @@ function EyeScan({
     } finally {
       runningRef.current = false;
       setStageCount(null);
+      setDotCountdown(false);
       hush();
       if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     }
@@ -366,7 +377,14 @@ function EyeScan({
 
       {testing && (
         <div className="stage">
-          <div ref={dotRef} className={`dot ${phase === 'calibrate' ? 'pulse' : ''}`}><DotBuddy /></div>
+          <div ref={dotRef} className={`dot ${phase === 'calibrate' ? 'pulse' : ''}`}>
+            <DotBuddy />
+            {dotCountdown && (
+              <svg className="dot-ring" viewBox="0 0 100 100" aria-hidden="true">
+                <circle cx="50" cy="50" r="46" pathLength="100" />
+              </svg>
+            )}
+          </div>
           {stageCount !== null && <div className="stage-count">{stageCount}</div>}
           {stageText && <div className="stage-text">{stageText}</div>}
         </div>

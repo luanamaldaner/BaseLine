@@ -827,3 +827,62 @@ button.brand-btn:active:not(:disabled) { transform: none; box-shadow: none; }
   grid-template-columns: minmax(0, 1fr);
 }
 main { min-width: 0; }
+
+/* Countdown ring that closes around the dot just before it starts moving */
+.dot-ring { position: absolute; inset: -14px; width: calc(100% + 28px); height: calc(100% + 28px); transform: rotate(-90deg); overflow: visible; }
+.dot-ring circle { fill: none; stroke: #fbbf24; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 100; animation: dot-ring 3s linear forwards; }
+@keyframes dot-ring { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 100; } }
+
+/* ---------- Coach alerts ---------- */
+.alerts { display: grid; gap: 0.75rem; }
+.alert-card {
+  display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; padding: 1rem 1.2rem; border-radius: 22px;
+  background: var(--surface); box-shadow: var(--shadow); border: 2px solid var(--border);
+}
+.alert-card[data-level='bad'] { border-color: var(--danger); background: color-mix(in srgb, #ef4444 7%, var(--surface)); }
+.alert-card[data-level='warn'] { border-color: var(--warn); background: color-mix(in srgb, #f59e0b 8%, var(--surface)); }
+.alert-main { flex: 1 1 220px; display: grid; gap: 0.15rem; min-width: 0; }
+.alert-actions { display: flex; gap: 0.4rem; }
+.alert-optin {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap;
+  padding: 0.9rem 1.1rem; border-radius: 18px; background: var(--surface-2);
+}
+.tab-badge {
+  display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; margin-left: 0.4rem;
+  border-radius: 999px; background: var(--danger); color: #fff; font-size: calc(0.75rem * var(--text-scale)); font-weight: 800;
+}
+
+/* ---------- Learn more: info tabs ---------- */
+.guide { display: grid; gap: 0.9rem; }
+.guide > h2 { margin: 0.5rem 0 0; font-size: calc(1.75rem * var(--text-scale)); }
+.info-tabs {
+  display: flex; gap: 4px; padding: 4px; width: fit-content; max-width: 100%; overflow-x: auto;
+  border-radius: 999px; background: var(--surface-2);
+}
+.info-tabs button {
+  display: inline-flex; align-items: center; gap: 0.45rem; white-space: nowrap;
+  min-height: 40px; padding: 0.3rem 1rem 0.3rem 0.5rem; border: none; border-radius: 999px;
+  background: transparent; color: var(--muted); box-shadow: none;
+}
+.info-tabs button:not(:has(.test-badge)) { padding-left: 1rem; }
+.info-tabs button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow); }
+.info-tabs button:active:not(:disabled) { transform: none; box-shadow: none; }
+.info-tabs .test-badge { border-radius: 50%; }
+.info-panel { padding: 1.5rem; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); }
+.info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 1rem 1.5rem; }
+.info-grid > p, .info-grid > .call-legend, .info-head { grid-column: 1 / -1; }
+.info-grid p { margin: 0; }
+.info-head { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.info-head > div { flex: 1 1 200px; }
+.info-head h3 { margin: 0; font-family: var(--serif); font-size: calc(1.6rem * var(--text-scale)); }
+.info-block { padding: 1rem 1.1rem; border-radius: 18px; background: var(--surface-2); }
+.info-block h4 { margin: 0 0 0.35rem; font-size: calc(0.8rem * var(--text-scale)); text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent-ink); }
+.info-block ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; }
+.info-panel .guide-points { margin: 0; }
+.call-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.call-legend li { display: flex; align-items: baseline; gap: 0.75rem; }
+.call-legend .chip { flex: none; min-width: 74px; text-align: center; }
+.info-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .info-grid { grid-template-columns: minmax(0, 1fr); } }
+.guide > h2 { font-size: calc(2.2rem * var(--text-scale)); margin: 0; }
+.guide-intro { margin: -0.4rem 0 0.3rem; }

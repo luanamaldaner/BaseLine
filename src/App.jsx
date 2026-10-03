@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { useSession, logOut } from './lib/session.js';
 import AuthScreen from './pages/AuthScreen.jsx';
 import { ProfileSetup, TeamSetup } from './pages/Setup.jsx';
-import Overview from './pages/Overview.jsx';
+import Overview, { Guide } from './pages/Overview.jsx';
 import History from './pages/History.jsx';
 import RunTest from './pages/RunTest.jsx';
 import { Roster, CoachTeam, AthleteTeam } from './pages/Team.jsx';
 import { Logo, APP_NAME } from './brand.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
+import { useCoachAlerts } from './components/Alerts.jsx';
 
 // UI state that should survive a reload (phones reload tabs in the background).
 function usePersisted(key, initial) {
@@ -112,12 +113,13 @@ function AthleteApp({ s }) {
       s={s}
       tab={tab}
       setTab={(t) => { if (t === 'test') setPick({ subjectUid: null, testId: null }); setTab(t); }}
-      tabs={[['me', 'My dashboard'], ['test', 'Run a test'], ['history', 'My history'], ['team', 'Team']]}
+      tabs={[['me', 'My dashboard'], ['test', 'Run a test'], ['history', 'My history'], ['team', 'Team'], ['learn', 'Learn more']]}
     >
       {tab === 'me' && <Overview subjectUid={me} isSelf onOpenTest={openTest} />}
       {tab === 'test' && <RunTest people={people} selfUid={me} isCoach={false} pick={pick} setPick={setPick} />}
       {tab === 'history' && <History subjectUid={me} subjectName={s.profile.name} isSelf names={nameMap(s)} />}
       {tab === 'team' && <AthleteTeam team={s.team} members={members} />}
+      {tab === 'learn' && <Guide />}
     </Frame>
   );
 }
@@ -130,6 +132,8 @@ function CoachApp({ s }) {
   const members = [...s.members.values()].sort((a, b) => a.name.localeCompare(b.name));
   const names = nameMap(s);
   const selected = members.find((m) => m.uid === player);
+  const alerts = useCoachAlerts(s.user.uid, names);
+  const openPlayer = (uid) => { setPlayer(uid); setPlayerTab('dashboard'); setTab('roster'); };
 
   const openTestFor = (uid, testId) => {
     setPick({ subjectUid: uid, testId });
@@ -145,13 +149,23 @@ function CoachApp({ s }) {
         if (t === 'test') setPick({ subjectUid: null, testId: null });
         setTab(t);
       }}
-      tabs={[['roster', 'Home'], ['test', 'Run a check'], ['team', 'Team']]}
+      tabs={[
+        ['roster', <>Home{alerts.unread.length > 0 && (
+          <span className="tab-badge" aria-label={`${alerts.unread.length} unread alerts`}>{alerts.unread.length}</span>
+        )}</>],
+        ['test', 'Run a check'],
+        ['team', 'Team'],
+        ['learn', 'Learn more'],
+      ]}
     >
       {tab === 'roster' && !selected && (
         <Roster
           members={members}
           coachName={s.profile.name}
           onOpen={(uid) => { setPlayer(uid); setPlayerTab('dashboard'); }}
+          alerts={alerts}
+          names={names}
+          onOpenPlayer={openPlayer}
           onRunCheck={() => { setPick({ subjectUid: null, testId: null }); setTab('test'); }}
         />
       )}
@@ -177,6 +191,7 @@ function CoachApp({ s }) {
       )}
       {tab === 'test' && <RunTest people={members} selfUid={null} isCoach pick={pick} setPick={setPick} />}
       {tab === 'team' && <CoachTeam team={s.team} members={members} names={names} />}
+      {tab === 'learn' && <Guide />}
     </Frame>
   );
 }
