@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import UpdateBanner from './components/UpdateBanner.jsx';
 import { captureInvite } from './lib/invite.js';
 import './styles.css';
 
@@ -14,5 +15,6 @@ if (import.meta.env.PROD && 'serviceWorker' in navigator) {
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <App />
+    <UpdateBanner />
   </StrictMode>,
 );
