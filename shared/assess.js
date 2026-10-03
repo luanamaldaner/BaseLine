@@ -23,12 +23,16 @@ export const SPECS = {
     lagMs: { worse: 'higher' },
   },
 };
+// The eye test on a phone: same metrics, but its own baseline, because a
+// phone's camera, screen size, and viewing distance differ from a laptop's.
+SPECS.eyePhone = SPECS.eye;
 
 // Every metric a test may store (eye also stores trackingError, unscored).
 export const METRIC_KEYS = {
   balance: ['sway', 'singleSway', 'errors'],
   reaction: ['medianMs', 'spreadMs', 'mistakes'],
   eye: ['onTarget', 'gain', 'saccadeRate', 'lagMs', 'trackingError'],
+  eyePhone: ['onTarget', 'gain', 'saccadeRate', 'lagMs', 'trackingError'],
 };
 
 export const TEST_IDS = Object.keys(SPECS);

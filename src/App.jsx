@@ -6,6 +6,8 @@ import Overview from './pages/Overview.jsx';
 import History from './pages/History.jsx';
 import RunTest from './pages/RunTest.jsx';
 import { Roster, CoachTeam, AthleteTeam } from './pages/Team.jsx';
+import { Logo, APP_NAME } from './brand.jsx';
+import ThemeToggle from './components/ThemeToggle.jsx';
 
 // UI state that should survive a reload (phones reload tabs in the background).
 function usePersisted(key, initial) {
@@ -47,6 +49,7 @@ export default function App() {
 function Splash({ text }) {
   return (
     <div className="gate">
+      <ThemeToggle fab />
       <p className="muted">{text}</p>
     </div>
   );
@@ -65,13 +68,14 @@ function Frame({ s, tabs, tab, setTab, children }) {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="logo" aria-hidden>◎</span> Baseline
-          <span className="team-name muted">{s.team.name}</span>
+          <Logo /> <span>{APP_NAME}</span>
+          <span className="team-name">{s.team.name}</span>
         </div>
         <div className="athlete">
           <span>
             <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
           </span>
+          <ThemeToggle />
           <button className="ghost small-btn" onClick={logOut}>Log out</button>
         </div>
       </header>
@@ -141,16 +145,21 @@ function CoachApp({ s }) {
         if (t === 'test') setPick({ subjectUid: null, testId: null });
         setTab(t);
       }}
-      tabs={[['roster', 'Roster'], ['test', 'Run a check'], ['team', 'Team']]}
+      tabs={[['roster', 'Home'], ['test', 'Run a check'], ['team', 'Team']]}
     >
       {tab === 'roster' && !selected && (
-        <Roster members={members} onOpen={(uid) => { setPlayer(uid); setPlayerTab('dashboard'); }} />
+        <Roster
+          members={members}
+          coachName={s.profile.name}
+          onOpen={(uid) => { setPlayer(uid); setPlayerTab('dashboard'); }}
+          onRunCheck={() => { setPick({ subjectUid: null, testId: null }); setTab('test'); }}
+        />
       )}
       {tab === 'roster' && selected && (
         <section>
           <div className="row player-head">
             <button className="ghost small-btn" onClick={() => setPlayer(null)}>← Roster</button>
-            <h2 className="grow">{selected.name}</h2>
+            <span className="grow" />
             <div className="seg">
               {[['dashboard', 'Dashboard'], ['history', 'History']].map(([id, label]) => (
                 <button key={id} className={playerTab === id ? 'on' : ''} onClick={() => setPlayerTab(id)}>

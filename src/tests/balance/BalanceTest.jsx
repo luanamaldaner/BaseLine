@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { STANCES, BALANCE, METRICS, computeBalance } from './balance.js';
 import { formatMetric } from '../../components/ResultCards.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
+import { StanceDiagram } from '../../components/Icons.jsx';
 import { beep, say, buzz, unlockAudio } from '../../lib/cues.js';
 
 const TEST = 'balance';
@@ -205,9 +206,14 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
 
       {phase === 'ready' && (
         <div className="panel balance-stage">
-          <p className="muted small">Stance {stanceIdx + 1} of {STANCES.length}</p>
-          <h3 className="stance-title">{stance.label}</h3>
-          <p>{stance.how}</p>
+          <div className="stance-head">
+            <StanceDiagram id={stance.id} />
+            <div>
+              <p className="muted small">Stance {stanceIdx + 1} of {STANCES.length}</p>
+              <h3 className="stance-title">{stance.label}</h3>
+              <p>{stance.how}</p>
+            </div>
+          </div>
           <p className="muted">
             Hold the phone flat against your chest. After you press start you have{' '}
             {BALANCE.countdownS} seconds to get in position; close your eyes at the beep.
@@ -221,6 +227,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
 
       {(phase === 'countdown' || phase === 'recording') && (
         <div className={`balance-live ${phase}`}>
+          <StanceDiagram id={stance.id} size={96} />
           <p className="muted">{stance.label}</p>
           <div className="balance-count">{count}</div>
           <p>{phase === 'countdown' ? 'Get in position…' : 'Eyes closed. Stay still.'}</p>

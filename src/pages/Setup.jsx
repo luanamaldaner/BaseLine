@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { createProfile, createTeam, joinTeam, logOut } from '../lib/session.js';
+import { Brand } from '../brand.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 function Shell({ title, intro, children, email }) {
   return (
     <div className="gate">
+      <ThemeToggle fab />
       <div className="gate-card">
-        <div className="brand gate-brand">
-          <span className="logo" aria-hidden>◎</span> Baseline
-        </div>
+        <Brand className="gate-brand" />
         <h1>{title}</h1>
         {intro && <p className="muted">{intro}</p>}
         {children}

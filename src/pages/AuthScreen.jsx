@@ -5,6 +5,8 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { auth } from '../lib/firebase.js';
+import { Brand } from '../brand.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 const MESSAGES = {
   'auth/invalid-email': 'That email address doesn’t look right.',
@@ -57,10 +59,9 @@ export default function AuthScreen() {
 
   return (
     <div className="gate">
+      <ThemeToggle fab />
       <form className="gate-card" onSubmit={submit}>
-        <div className="brand gate-brand">
-          <span className="logo" aria-hidden>◎</span> Baseline
-        </div>
+        <Brand className="gate-brand" />
         <h1>{title}</h1>
         <p className="muted">
           {mode === 'signup'

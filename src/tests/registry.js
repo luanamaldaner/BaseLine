@@ -1,5 +1,9 @@
 // Every test in one place: its metrics, its headline metric for trend charts,
-// and what it's for. The Overview and History pages read from this.
+// and what it's for.
+//
+// TESTS are what you can run. RESULT_TESTS are what results are stored and
+// scored under: the eye test keeps separate laptop ('eye') and phone
+// ('eyePhone') baselines, so it appears twice there.
 
 import { METRICS as BALANCE_METRICS } from './balance/balance.js';
 import { METRICS as REACTION_METRICS } from './reaction/reaction.js';
@@ -42,12 +46,20 @@ export const TESTS = [
     metrics: EYE_METRICS,
     headline: 'onTarget',
     time: '1 min',
-    device: 'Laptop webcam',
+    device: 'Phone or laptop',
+    variants: ['eye', 'eyePhone'],
     measures: 'How smoothly the eyes follow a moving dot.',
     system: 'Eye-movement control, closely linked to the inner ear',
     bestAt: 'Visual problems behind complaints like blurry vision or trouble reading, which symptom lists can miss. Hard to fake.',
-    limits: 'A webcam is noisier than a clinical eye tracker. Lighting, glasses, and head movement all affect it.',
+    limits: 'A camera is noisier than a clinical eye tracker. Lighting, glasses, and head movement all affect it. Phone and laptop results are compared only to the same device.',
   },
 ];
 
-export const testById = Object.fromEntries(TESTS.map((t) => [t.id, t]));
+const eye = TESTS.find((t) => t.id === 'eye');
+export const RESULT_TESTS = [
+  ...TESTS.filter((t) => t !== eye),
+  { ...eye, label: 'Eye pursuit (laptop)', device: 'Laptop' },
+  { ...eye, id: 'eyePhone', label: 'Eye pursuit (phone)', device: 'Phone' },
+];
+
+export const testById = Object.fromEntries(RESULT_TESTS.map((t) => [t.id, t]));

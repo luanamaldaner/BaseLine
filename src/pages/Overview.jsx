@@ -1,34 +1,61 @@
-import { TESTS } from '../tests/registry.js';
+import { TESTS, RESULT_TESTS } from '../tests/registry.js';
 import { getTrials, summarizeBaseline, usualRange, BASELINE_TRIALS } from '../lib/baseline.js';
-import { STATUS, latestCheck, overallStatus, formatWhen } from '../lib/status.js';
+import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } from '../lib/status.js';
 import { formatMetric } from '../components/ResultCards.jsx';
 import Trend from '../components/Trend.jsx';
+import { TestBadge, TEST_THEME } from '../components/Icons.jsx';
+import Avatar from '../components/Avatar.jsx';
+import { getSession } from '../lib/session.js';
+
+// Display name for anyone this viewer can see.
+function nameOf(uid) {
+  const s = getSession();
+  if (s.user?.uid === uid) return s.profile?.name ?? '';
+  return s.members.get(uid)?.name ?? '';
+}
 
 // One athlete's dashboard. Seen by the athlete themselves and by the coach.
 // isSelf: the viewer is this athlete (so buttons say "Record baseline").
 export default function Overview({ subjectUid, isSelf, onOpenTest }) {
-  const rows = TESTS.map((test) => ({
+  const all = RESULT_TESTS.map((test) => ({
     test,
     trials: getTrials(subjectUid, test.id),
     baseN: summarizeBaseline(subjectUid, test.id)?.n ?? 0,
     check: latestCheck(subjectUid, test),
   }));
-  const overall = overallStatus(rows.map((r) => r.check));
-  const baselineDone = rows.filter((r) => r.baseN >= BASELINE_TRIALS).length;
+  // The eye test has a laptop and a phone baseline. Show the phone card only
+  // once there's phone data, and the laptop card unless only phone data exists.
+  const has = (id) => all.find((r) => r.test.id === id).trials.length > 0;
+  const rows = all.filter((r) =>
+    r.test.id === 'eyePhone' ? has('eyePhone') : r.test.id === 'eye' ? has('eye') || !has('eyePhone') : true,
+  );
+  const overall = overallStatus(all.map((r) => r.check));
+  const baselineDone = baselinesComplete(subjectUid);
+  const name = nameOf(subjectUid);
+  const lastCheck = all.filter((r) => r.check).map((r) => r.check.trial.at).sort().pop();
+  const st = overall && STATUS[overall];
 
   return (
     <section className="overview">
-      <div className="flow-cta">
-        <button className="primary big-btn" onClick={() => onOpenTest('all')}>
-          Run all three tests
-        </button>
-        <span className="muted small">
-          Reaction, then eyes, then balance, one after the other. About four minutes, spoken
-          instructions, one save at the end.
-        </span>
+      <div className="player-card">
+        <Avatar name={name || '?'} />
+        <div className="player-main">
+          <p className="eyebrow">{isSelf ? 'My dashboard' : 'Player dashboard'}</p>
+          <h1>{name}</h1>
+          <p className="muted">
+            Baselines {baselineDone} of {TESTS.length}
+            {lastCheck ? ` · Last check ${formatWhen(lastCheck)}` : ' · No checks yet'}
+          </p>
+        </div>
+        <span className={`chip big-chip ${st?.cls ?? 'muted'}`}>{st ? st.short : 'No checks'}</span>
+        {onOpenTest && (
+          <button className="primary big-btn player-cta" onClick={() => onOpenTest('all')}>
+            Run all three tests
+          </button>
+        )}
       </div>
 
-      <OverallBanner overall={overall} rows={rows} baselineDone={baselineDone} isSelf={isSelf} />
+      <OverallBanner overall={overall} rows={all} baselineDone={baselineDone} isSelf={isSelf} />
 
       <div className="test-grid">
         {rows.map(({ test, trials, baseN, check }) => {
@@ -36,33 +63,39 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
           const status = check && STATUS[check.comparison.status];
           const needsBaseline = baseN < BASELINE_TRIALS;
           return (
-            <article className="test-card" key={test.id}>
+            <article className="test-card" key={test.id} style={{ '--tc': TEST_THEME[test.id]?.color }}>
               <header>
-                <h3>{test.label}</h3>
-                {status && <span className={`chip ${status.cls}`}>{status.short}</span>}
+                <TestBadge id={test.id} size={40} />
+                <div className="test-card-title">
+                  <h3>{test.label}</h3>
+                  <span className="muted small">{test.measures}</span>
+                </div>
               </header>
-              <p className="muted small">{test.measures}</p>
-              <dl className="facts">
-                <div>
-                  <dt>Baseline</dt>
-                  <dd>
-                    {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS}
-                    {needsBaseline ? '' : ' ✓'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Latest check</dt>
-                  <dd>{check ? formatWhen(check.trial.at) : '—'}</dd>
-                </div>
-                {check && (
-                  <div>
-                    <dt>{def.label}</dt>
-                    <dd>
-                      {formatMetric(check.trial.metrics[test.headline], def)} {def.unit}
-                    </dd>
-                  </div>
-                )}
-              </dl>
+
+              <div className="test-card-stat">
+                <span className="muted small">{check ? `Latest ${def.label.toLowerCase()}` : 'Latest check'}</span>
+                <span className="stat-row">
+                  <span className="stat-big">
+                    {check ? formatMetric(check.trial.metrics[test.headline], def) : '—'}
+                    {check && <small> {def.unit}</small>}
+                  </span>
+                  {status && <span className={`chip ${status.cls}`}>{status.short}</span>}
+                </span>
+                <span className="muted small">{check ? formatWhen(check.trial.at) : 'No post-hit checks yet'}</span>
+              </div>
+
+              <div className="baseline-meter">
+                <span className="muted small">Baseline</span>
+                <span className="segments" aria-hidden>
+                  {Array.from({ length: BASELINE_TRIALS }, (_, i) => (
+                    <i key={i} className={i < baseN ? 'on' : ''} />
+                  ))}
+                </span>
+                <span className="small">
+                  {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS}{needsBaseline ? '' : ' ✓'}
+                </span>
+              </div>
+
               <p className="trend-title small">{def.label} over time</p>
               <Trend
                 trials={trials}
@@ -71,7 +104,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
                 band={usualRange(subjectUid, test.id, test.headline)}
               />
               {onOpenTest && (
-                <button onClick={() => onOpenTest(test.id)}>
+                <button className="test-card-btn" onClick={() => onOpenTest(test.id)}>
                   {isSelf && needsBaseline ? 'Record baseline' : 'Run a check'}
                 </button>
               )}

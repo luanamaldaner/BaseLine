@@ -30,13 +30,13 @@ rules_version = '2';
 // Collection: teams/{teamId}/trials/{trialId}
 //   - subjectUid: string - athlete the result belongs to
 //   - testerUid:  string - who ran the test
-//   - test:       'balance' | 'reaction' | 'eye'
+//   - test:       'balance' | 'reaction' | 'eye' | 'eyePhone'
 //   - kind:       'baseline' | 'check'
 //   - at:         string, ISO-8601 UTC
 //   - metrics:    map; exact keys per test (below); number in [-1e6, 1e6] or null
 //       balance:  sway, singleSway, errors
 //       reaction: medianMs, spreadMs, mistakes
-//       eye:      onTarget, gain, saccadeRate, lagMs, trackingError
+//       eye, eyePhone: onTarget, gain, saccadeRate, lagMs, trackingError
 //   - status:     'normal' | 'monitor' | 'refer' | 'no-baseline' (checks only)
 //   Baselines: only your own. Checks: anyone on the team (or the coach) may
 //   create one for any athlete on the team, but can never read it back.
@@ -46,7 +46,7 @@ rules_version = '2';
 //   Baseline cutoffs an athlete publishes so teammates' phones can judge a
 //   post-hit check without seeing any results. No results are stored here.
 //   - subjectUid: string
-//   - test:       'balance' | 'reaction' | 'eye'
+//   - test:       'balance' | 'reaction' | 'eye' | 'eyePhone'
 //   - n:          number - baseline trials behind the cutoffs (1-1000)
 //   - limits:     map metric -> { worse: 'higher' | 'lower', limit: number }
 //   Readable by the team; written by the athlete it describes or the coach.
@@ -128,7 +128,7 @@ service cloud.firestore {
           isMetric(m, 'sway') && isMetric(m, 'singleSway') && isMetric(m, 'errors')) ||
         (test == 'reaction' && hasExactFields(m, ['medianMs', 'spreadMs', 'mistakes']) &&
           isMetric(m, 'medianMs') && isMetric(m, 'spreadMs') && isMetric(m, 'mistakes')) ||
-        (test == 'eye' &&
+        ((test == 'eye' || test == 'eyePhone') &&
           hasExactFields(m, ['onTarget', 'gain', 'saccadeRate', 'lagMs', 'trackingError']) &&
           isMetric(m, 'onTarget') && isMetric(m, 'gain') && isMetric(m, 'saccadeRate') &&
           isMetric(m, 'lagMs') && isMetric(m, 'trackingError'))
@@ -138,7 +138,7 @@ service cloud.firestore {
     // A trial's common fields, for create.
     function isValidTrialBase(d) {
       return d.testerUid == request.auth.uid &&
-        d.test in ['balance', 'reaction', 'eye'] &&
+        d.test in ['balance', 'reaction', 'eye', 'eyePhone'] &&
         isValidDateString(d.at) &&
         isValidMetrics(d.test, d.metrics);
     }
@@ -171,7 +171,7 @@ service cloud.firestore {
 
     function isValidRanges(rangeId, d) {
       return hasExactFields(d, ['subjectUid', 'test', 'n', 'limits']) &&
-        d.test in ['balance', 'reaction', 'eye'] &&
+        d.test in ['balance', 'reaction', 'eye', 'eyePhone'] &&
         d.subjectUid is string && rangeId == d.subjectUid + '_' + d.test &&
         d.n is int && d.n >= 1 && d.n <= 1000 &&
         d.limits is map &&

@@ -1,6 +1,7 @@
 // Combines per-test results into one overall call.
 
-import { getTrials, compare } from './baseline.js';
+import { getTrials, compare, summarizeBaseline, BASELINE_TRIALS } from './baseline.js';
+import { TESTS } from '../tests/registry.js';
 
 export const STATUS = {
   normal: { cls: 'ok', short: 'Normal', title: 'Normal', text: 'Every test is within this athlete’s usual range.' },
@@ -29,6 +30,13 @@ export function overallStatus(checks) {
   const monitors = statuses.filter((s) => s === 'monitor').length;
   if (statuses.includes('refer') || monitors >= 2) return 'refer';
   return monitors === 1 ? 'monitor' : 'normal';
+}
+
+// How many of the runnable tests have a full baseline (on any device).
+export function baselinesComplete(subjectUid) {
+  return TESTS.filter((t) =>
+    (t.variants ?? [t.id]).some((id) => (summarizeBaseline(subjectUid, id)?.n ?? 0) >= BASELINE_TRIALS),
+  ).length;
 }
 
 export function formatWhen(iso) {

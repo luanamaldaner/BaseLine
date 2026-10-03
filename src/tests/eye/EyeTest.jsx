@@ -7,16 +7,88 @@ import TracePlot from './TracePlot.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { say, hush } from '../../lib/cues.js';
 
-const TEST = 'eye';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Guided mode (the Run-all flow): no header, intro, or results of its own.
-// The camera warms up on mount; the sweep starts when `startSignal` changes
-// and the outcome goes to `onFinished`.
+// Phones and laptops have different cameras, screens, and viewing distances,
+// so each keeps its own baseline: 'eye' (laptop) and 'eyePhone'.
+export const EYE_DEVICES = {
+  laptop: {
+    test: 'eye',
+    label: 'Laptop',
+    tips: ["Sit about an arm's length (50 cm) from the screen.", 'Face a window or lamp so your face is well lit.'],
+  },
+  phone: {
+    test: 'eyePhone',
+    label: 'Phone',
+    tips: ['Turn the phone sideways and prop it up at eye level, about 30 cm away.', 'Face a window or lamp so your face is well lit.'],
+  },
+};
+
+export function detectDevice() {
+  try {
+    const coarse = matchMedia('(pointer: coarse)').matches;
+    return coarse && Math.min(screen.width, screen.height) < 600 ? 'phone' : 'laptop';
+  } catch {
+    return 'laptop';
+  }
+}
+
+// On its own, the test shows a short intro and the scan opens in a popup (the
+// camera runs only while it's open). In the Run-all flow (guided) it runs
+// inline, against the baseline for the device it's on.
+export default function EyeTest(props) {
+  const [device, setDevice] = useState(detectDevice);
+  const [open, setOpen] = useState(false);
+  const { test, tips, label } = EYE_DEVICES[device];
+  const { subject, canSeeData } = props;
+
+  if (props.guided) return <EyeScan {...props} test={test} />;
+
+  return (
+    <section className="test">
+      <header className="test-head">
+        <h2>Eye pursuit</h2>
+        <p className="muted">
+          Follow a friendly little face with your eyes. The camera tracks your irises to measure
+          how smoothly they keep up.
+        </p>
+      </header>
+      <div className="panel eye-launch">
+        <div className="eye-launch-art" aria-hidden><DotBuddy /></div>
+        <div className="eye-launch-body">
+          <p className="small muted" id="eye-device-label">Which device are you using?</p>
+          <div className="segmented" role="group" aria-labelledby="eye-device-label">
+            {Object.entries(EYE_DEVICES).map(([id, d]) => (
+              <button key={id} className={device === id ? 'active' : ''} aria-pressed={device === id}
+                onClick={() => setDevice(id)}>
+                {d.label}
+              </button>
+            ))}
+          </div>
+          <ul className="tips">
+            {tips.map((t) => <li key={t}>{t}</li>)}
+          </ul>
+          <p className="muted small">Each device keeps its own baseline, because cameras differ.</p>
+          {canSeeData && <BaselineProgress subjectUid={subject.uid} test={test} />}
+          <button className="primary big-btn" onClick={() => setOpen(true)}>Open eye scan</button>
+        </div>
+      </div>
+      {open && <EyeScan {...props} test={test} deviceLabel={label} tips={tips} onClose={() => setOpen(false)} />}
+    </section>
+  );
+}
+
+// The scan itself. Guided mode (the Run-all flow): no header, intro, or
+// results of its own. The camera warms up on mount; the sweep starts when
+// `startSignal` changes and the outcome goes to `onFinished`.
+// onClose: shown in a popup.
 // `speak`: read the walk-through aloud. Off by default — the eyes are open,
 // so the text on the stage is enough; the athlete opts in with the speaker
 // button (or the flow passes it through).
-export default function EyeTest({ subject, isSelf, canSeeData, guided = false, speak = false, startSignal = 0, onFinished }) {
+function EyeScan({
+  subject, isSelf, canSeeData, guided = false, speak = false, startSignal = 0, onFinished, test, deviceLabel,
+  tips = [], onClose,
+}) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
   const dotRef = useRef(null);
@@ -199,7 +271,7 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
       // Compare against the baseline as it stands, before this trial is saved.
       setResult({ ...r, calib });
       setPhase('results');
-      if (guided) onFinished?.({ ...r, calib });
+      if (guided) onFinished?.({ ...r, calib, testId: test });
     } catch (e) {
       sinkRef.current = null;
       if (e.message === 'aborted') {
@@ -221,9 +293,9 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
   const testing = phase === 'calibrate' || phase === 'pursuit';
   const quality = result?.ok ? qualityWarnings(result) : [];
 
-  return (
+  const content = (
     <section className="test">
-      {!guided && (
+      {!guided && !onClose && (
         <header className="test-head">
           <h2>Eye pursuit</h2>
           <p className="muted">
@@ -250,12 +322,24 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
           {status === 'loading' && <div className="camera-msg">Starting camera + face model…</div>}
         </div>
 
+        {onClose ? (
+          <ScanGuide
+            live={live} ready={status === 'ready'} done={phase === 'results'} tips={tips}
+            onStart={runTest}
+            readAloud={readAloud}
+            onReadAloud={() => {
+              setReadAloud(true);
+              say('Keep your head still and move only your eyes. A little face will appear: look right at its nose, and when it jumps, look at the new spot. Then follow it as it glides side to side.');
+            }}
+            progress={canSeeData && <BaselineProgress subjectUid={subject.uid} test={test} />}
+          />
+        ) : (
         <div className="panel">
           <h3>Setup check</h3>
           <LiveSignal live={live} />
           {guided ? null : (<>
           <ul className="tips">
-            <li>Sit ~50 cm (arm's length) from the screen, face well lit.</li>
+            <li>Face well lit, camera at eye level.</li>
             <li>Remove glasses if you can.</li>
             <li>Keep your head still; move only your eyes.</li>
             <li>Press Esc to stop a test.</li>
@@ -274,14 +358,15 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
               {phase === 'results' ? 'Run again' : 'Start test'}
             </button>
           </div>
-          {phase !== 'results' && canSeeData && <BaselineProgress subjectUid={subject.uid} test={TEST} />}
+          {phase !== 'results' && canSeeData && <BaselineProgress subjectUid={subject.uid} test={test} />}
           </>)}
         </div>
+        )}
       </div>
 
       {testing && (
         <div className="stage">
-          <div ref={dotRef} className={`dot ${phase === 'calibrate' ? 'pulse' : ''}`} />
+          <div ref={dotRef} className={`dot ${phase === 'calibrate' ? 'pulse' : ''}`}><DotBuddy /></div>
           {stageCount !== null && <div className="stage-count">{stageCount}</div>}
           {stageText && <div className="stage-text">{stageText}</div>}
         </div>
@@ -307,7 +392,7 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
                 subject={subject}
                 isSelf={isSelf}
                 canSeeData={canSeeData}
-                test={TEST}
+                test={test}
                 metrics={result.metrics}
                 spec={METRICS}
                 onDiscard={() => { setResult(null); setPhase('preview'); }}
@@ -331,6 +416,13 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
         </div>
       )}
     </section>
+  );
+  if (!onClose) return content;
+  return (
+    <EyeModal title="Eye scan" subtitle={`${deviceLabel} baseline · ${isSelf ? 'testing yourself' : subject.name}`}
+      busy={testing} onClose={onClose}>
+      {content}
+    </EyeModal>
   );
 }
 
@@ -403,4 +495,167 @@ function drawOverlay(canvas, video, s) {
     ctx.arc(iris.x * w, iris.y * h, r * 1.6, 0, 2 * Math.PI);
     ctx.fill();
   }
+}
+
+// Popup around the scan. Esc or the backdrop closes it, except mid-test
+// (then Esc stops the test instead).
+function EyeModal({ title, subtitle, busy, onClose, children }) {
+  const ref = useRef(null);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+
+  useEffect(() => {
+    ref.current?.focus();
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const onKey = (e) => {
+      if (e.key === 'Escape' && !busyRef.current) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="eye-modal-title" tabIndex={-1} ref={ref}>
+        <header className="modal-head">
+          <div>
+            <h2 id="eye-modal-title">{title}</h2>
+            <p className="muted small">{subtitle}</p>
+          </div>
+          <button className="ghost small-btn modal-close" onClick={onClose} aria-label="Close eye scan">✕</button>
+        </header>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// The target: a small round face. Its nose sits exactly at the center, so
+// there is one clear point to look at; the eyes blink now and then.
+function DotBuddy() {
+  return (
+    <svg className="buddy" viewBox="-24 -24 48 48" width="100%" height="100%" aria-hidden="true">
+      <circle r="20" className="buddy-body" />
+      <ellipse cx="-11" cy="4.5" rx="3.6" ry="2.4" className="buddy-cheek" />
+      <ellipse cx="11" cy="4.5" rx="3.6" ry="2.4" className="buddy-cheek" />
+      <g className="buddy-eyes">
+        <ellipse cx="-6.5" cy="-5" rx="2.4" ry="3.2" />
+        <ellipse cx="6.5" cy="-5" rx="2.4" ry="3.2" />
+        <circle cx="-5.7" cy="-6.2" r="0.9" className="buddy-shine" />
+        <circle cx="7.3" cy="-6.2" r="0.9" className="buddy-shine" />
+      </g>
+      <circle r="2.3" className="buddy-nose" />
+      <path d="M-4.5 6.5q4.5 4 9 0" className="buddy-smile" />
+    </svg>
+  );
+}
+
+// The popup's setup, one step at a time: get in position, check the camera
+// can see you, then what's about to happen and Start. The camera preview
+// stays on beside it the whole time.
+const GUIDE_STEPS = ['Position', 'Camera', 'Ready'];
+
+function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, progress }) {
+  const [step, setStep] = useState(0);
+  const headingRef = useRef(null);
+  useEffect(() => { headingRef.current?.focus(); }, [step, done]);
+
+  const face = !!live?.face;
+  const facing = face && Number.isFinite(live.yaw) && Math.abs(live.yaw) < 0.08;
+  const eyesOpen = face && !live.blink;
+  const checks = [
+    ['We can see your face', face, 'Move into the frame and face the light.'],
+    ['Looking straight at the screen', facing, 'Turn your head so your nose points at the screen.'],
+    ['Eyes open', eyesOpen, 'Open your eyes wide; take glasses off if they glare.'],
+  ];
+  const allGood = checks.every(([, ok]) => ok);
+
+  if (done) {
+    return (
+      <div className="panel scan-guide">
+        <p className="eyebrow">All done</p>
+        <h3 ref={headingRef} tabIndex={-1}>Nice work!</h3>
+        <p className="muted">Your results are below. If something went wrong, run it again.</p>
+        <button className="big-btn" onClick={onStart}>Run again</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel scan-guide">
+      <ol className="guide-steps" aria-label="Setup steps">
+        {GUIDE_STEPS.map((label, i) => (
+          <li key={label} className={i < step ? 'done' : i === step ? 'current' : ''}
+            aria-current={i === step ? 'step' : undefined}>
+            <span className="guide-num" aria-hidden>{i < step ? '✓' : i + 1}</span>
+            <span className="guide-label">{label}</span>
+          </li>
+        ))}
+      </ol>
+
+      {step === 0 && (
+        <>
+          <h3 ref={headingRef} tabIndex={-1}>Get in position</h3>
+          <ul className="guide-list">
+            {tips.map((t) => <li key={t}>{t}</li>)}
+            <li>Take glasses off if you can.</li>
+            <li>Keep your head still. Only your eyes will move.</li>
+          </ul>
+          <button className="primary big-btn" onClick={() => setStep(1)}>I’m in position</button>
+        </>
+      )}
+
+      {step === 1 && (
+        <>
+          <h3 ref={headingRef} tabIndex={-1}>Camera check</h3>
+          {!ready ? (
+            <p className="muted">Starting the camera…</p>
+          ) : (
+            <ul className="guide-checks" aria-live="polite">
+              {checks.map(([label, ok, hint]) => (
+                <li key={label} className={ok ? 'ok' : ''}>
+                  <span className="check-mark" aria-hidden>{ok ? '✓' : ''}</span>
+                  <span>
+                    <b>{label}</b>
+                    {!ok && <span className="muted small"> {hint}</span>}
+                    <span className="sr-only">{ok ? ': yes' : ': not yet'}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className={allGood ? 'guide-ok' : 'muted small'}>
+            {allGood ? 'Looks great!' : 'The dots on the camera show where we see your eyes.'}
+          </p>
+          <div className="row">
+            <button className="primary big-btn" disabled={!ready || !face} onClick={() => setStep(2)}>Next</button>
+            <button className="ghost" onClick={() => setStep(0)}>Back</button>
+          </div>
+        </>
+      )}
+
+      {step === 2 && (
+        <>
+          <h3 ref={headingRef} tabIndex={-1}>Here’s what happens</h3>
+          <ol className="guide-list numbered">
+            <li>A little face pops up. Look at its nose until it jumps to a new spot.</li>
+            <li>Then it glides side to side. Follow it with just your eyes.</li>
+            <li>It takes about 30 seconds. Press Esc to stop at any time.</li>
+          </ol>
+          <button className="ghost speak-btn" onClick={onReadAloud}>
+            🔊 {readAloud ? 'Read it again' : 'Read this to me'}
+          </button>
+          {progress}
+          <div className="row">
+            <button className="primary big-btn" disabled={!ready} onClick={onStart}>Start</button>
+            <button className="ghost" onClick={() => setStep(1)}>Back</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }

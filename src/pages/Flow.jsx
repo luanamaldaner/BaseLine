@@ -271,10 +271,13 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const [saved, setSaved] = useState(null); // { kind: 'baseline' } | { kind: 'check', byTest }
 
   const done = STEPS.filter((s) => results[s.id]?.ok);
+  // The id results are stored and scored under: the eye test reports 'eye'
+  // (laptop) or 'eyePhone', since each device keeps its own baseline.
+  const tid = (s) => results[s.id]?.testId ?? s.id;
   const previews = Object.fromEntries(
     done.map((s) => [
       s.id,
-      canSeeData && summarizeBaseline(subject.uid, s.id) ? compare(subject.uid, s.id, results[s.id].metrics) : null,
+      canSeeData && summarizeBaseline(subject.uid, tid(s)) ? compare(subject.uid, tid(s), results[s.id].metrics) : null,
     ]),
   );
 
@@ -287,7 +290,7 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const status = overall && STATUS[overall];
 
   function saveAllBaseline() {
-    for (const s of done) saveBaseline(s.id, results[s.id].metrics);
+    for (const s of done) saveBaseline(tid(s), results[s.id].metrics);
     setSaved({ kind: 'baseline' });
   }
 
@@ -296,7 +299,7 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
     setError(null);
     try {
       const byTest = {};
-      for (const s of done) byTest[s.id] = await submitCheck(subject.uid, s.id, results[s.id].metrics);
+      for (const s of done) byTest[s.id] = await submitCheck(subject.uid, tid(s), results[s.id].metrics);
       setSaved({ kind: 'check', byTest });
     } catch (e) {
       setError(e?.message || 'Something went wrong. Try again.');
