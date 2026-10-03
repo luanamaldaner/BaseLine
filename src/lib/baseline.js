@@ -57,6 +57,10 @@ export function exportCsv(subjectUids, names) {
       kind: t.kind,
       status: t.status ?? '',
       tested_by: names.get(t.testerUid) ?? '',
+      rested: t.conditions?.rested ?? '',
+      place: t.conditions?.place ?? '',
+      light: t.conditions?.light ?? '',
+      device: t.conditions?.device ?? '',
       ...t.metrics,
     })),
   );

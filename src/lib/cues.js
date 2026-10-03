@@ -2,7 +2,7 @@
 //
 // The athlete may be young, concussed, or have their eyes closed, so the
 // screen is never the only channel: every instruction is also spoken, and
-// transitions get a beep and a buzz where the device supports them.
+// transitions get a beep and a buzz (see buzz() for iPhones).
 
 let audioCtx = null;
 
@@ -44,4 +44,43 @@ export function hush() {
   }
 }
 
-export const buzz = (pattern) => navigator.vibrate?.(pattern);
+// Vibration. Android browsers support navigator.vibrate; iPhone browsers
+// don't. Since iOS 18, though, Safari plays a real haptic "tick" from the
+// Taptic Engine when a switch-style checkbox is toggled, including when its
+// label is clicked from code. That's unofficial and could change in a later
+// iOS, so it's only a backup: on iPhones the beep and voice stay the main cue.
+let hapticLabel = null;
+function iosTick() {
+  try {
+    if (!hapticLabel) {
+      const box = document.createElement('div');
+      box.setAttribute('aria-hidden', 'true');
+      box.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0;pointer-events:none';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      input.setAttribute('switch', '');
+      input.id = 'haptic-switch';
+      input.tabIndex = -1;
+      hapticLabel = document.createElement('label');
+      hapticLabel.htmlFor = input.id;
+      box.append(input, hapticLabel);
+      document.body.append(box);
+    }
+    hapticLabel.click();
+  } catch {
+    /* no haptics: sound is still the cue */
+  }
+}
+
+// pattern: ms, or [on, off, on, ...] like navigator.vibrate.
+export function buzz(pattern) {
+  if (navigator.vibrate) return navigator.vibrate(pattern);
+  // iPhone: each tick is very short, so fill each "on" stretch with ticks
+  // every 80 ms to make it feel like a buzz.
+  const segments = Array.isArray(pattern) ? pattern : [pattern];
+  let t = 0;
+  segments.forEach((ms, i) => {
+    if (i % 2 === 0) for (let k = 0; k < ms; k += 80) setTimeout(iosTick, t + k);
+    t += ms;
+  });
+}

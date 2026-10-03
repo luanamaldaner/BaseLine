@@ -75,6 +75,7 @@ export default function History({ subjectUid, subjectName, isSelf, names }) {
                         {t.kind === 'baseline' ? 'Baseline' : 'Post-hit check'}
                       </span>
                       {status && <span className={`chip ${status.cls}`}>{status.short}</span>}
+                      <ConditionTags c={t.conditions} />
                       {by && <span className="muted small">run by {by}</span>}
                     </div>
                     <div className="trial-metrics muted small">
@@ -95,5 +96,22 @@ export default function History({ subjectUid, subjectName, isSelf, names }) {
         </div>
       ))}
     </section>
+  );
+}
+
+// Only the conditions worth flagging, so a normal result stays uncluttered.
+function ConditionTags({ c }) {
+  if (!c) return null;
+  const tags = [
+    c.rested === false && 'Not rested',
+    c.place === 'sideline' && 'Loud sideline',
+    c.light === 'sun' && 'Direct sun',
+  ].filter(Boolean);
+  if (!tags.length && !c.device) return null;
+  return (
+    <span className="cond-tags">
+      {tags.map((t) => <span key={t} className="chip warn" title="Testing condition that can skew results">{t}</span>)}
+      {c.device && <span className="chip muted">{c.device === 'phone' ? 'Phone' : 'Laptop'}</span>}
+    </span>
   );
 }

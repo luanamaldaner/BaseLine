@@ -3,6 +3,8 @@ import { TESTS, testById } from '../tests/registry.js';
 import Flow from './Flow.jsx';
 import { TestBadge } from '../components/Icons.jsx';
 import Avatar from '../components/Avatar.jsx';
+import ConditionsGate from '../components/ConditionsGate.jsx';
+import { ConditionsContext } from '../lib/conditions.js';
 
 // The one bar shown on a test screen (the app header and tabs are hidden).
 function TestBar({ title, who, onBack }) {
@@ -54,6 +56,26 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
 
   const isSelf = subject.uid === selfUid;
 
+  // Before any test: rest, place, light. The answers go with every result,
+  // and stay set while the same person runs more tests.
+  const needsConditions = pick.testId && !pick.conditions;
+  if (needsConditions) {
+    return (
+      <section className="run">
+        <TestBar
+          title={pick.testId === 'all' ? 'All three tests' : testById[pick.testId]?.label}
+          who={isSelf ? 'Testing yourself' : `Testing ${subject.name}`}
+          onBack={() => setPick({ ...pick, testId: null })}
+        />
+        <ConditionsGate
+          kind={isSelf ? 'baseline' : 'check'}
+          onReady={(conditions) => setPick({ ...pick, conditions })}
+          onBack={() => setPick({ ...pick, testId: null })}
+        />
+      </section>
+    );
+  }
+
   // All three objective tests, one after the other, with spoken instructions.
   if (pick.testId === 'all') {
     return (
@@ -63,13 +85,15 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
           who={isSelf ? 'Testing yourself' : `Testing ${subject.name}`}
           onBack={() => setPick({ ...pick, testId: null })}
         />
-        <Flow
-          key={subject.uid}
-          subject={subject}
-          isSelf={isSelf}
-          canSeeData={isSelf || isCoach}
-          onDone={() => setPick({ ...pick, testId: null })}
-        />
+        <ConditionsContext.Provider value={pick.conditions}>
+          <Flow
+            key={subject.uid}
+            subject={subject}
+            isSelf={isSelf}
+            canSeeData={isSelf || isCoach}
+            onDone={() => setPick({ ...pick, testId: null })}
+          />
+        </ConditionsContext.Provider>
       </section>
     );
   }
@@ -113,12 +137,14 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
         who={isSelf ? 'Testing yourself' : `Testing ${subject.name}`}
         onBack={() => setPick({ ...pick, testId: null })}
       />
-      <test.Component
-        key={`${subject.uid}:${test.id}`}
-        subject={subject}
-        isSelf={isSelf}
-        canSeeData={isSelf || isCoach}
-      />
+      <ConditionsContext.Provider value={pick.conditions}>
+        <test.Component
+          key={`${subject.uid}:${test.id}`}
+          subject={subject}
+          isSelf={isSelf}
+          canSeeData={isSelf || isCoach}
+        />
+      </ConditionsContext.Provider>
     </section>
   );
 }

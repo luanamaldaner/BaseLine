@@ -7,6 +7,11 @@ import { StanceDiagram } from '../../components/Icons.jsx';
 import { beep, say, buzz, unlockAudio } from '../../lib/cues.js';
 
 const TEST = 'balance';
+// Vibration cues: one long buzz = close your eyes; three sharp pulses = open
+// them. Different enough to tell apart without looking.
+const CUE_CLOSE = 600;
+const CUE_OPEN = [200, 120, 200, 120, 200];
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function requestMotionPermission() {
@@ -104,15 +109,21 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
       await sleep(1000);
       if (abortRef.current) return;
     }
-    // Go
+    // Go. The phone is pressed to the chest, the best place to feel a buzz,
+    // so where the phone can vibrate (Android; iPhones on iOS 18+ via a
+    // haptic workaround, see lib/cues.js) a long
+    // buzz is the main "close your eyes" cue and the beep is the backup. The
+    // buzz itself shakes the phone, so recording starts once it has stopped.
+    beep(880, 300);
+    buzz(CUE_CLOSE);
+    await sleep(CUE_CLOSE + 150);
+    if (abortRef.current) return;
     const samples = [];
     let t0 = null;
     sinkRef.current = (s) => {
       t0 ??= s.t;
       samples.push({ t: s.t - t0, a: s.a });
     };
-    beep(880, 300);
-    buzz(200);
     setPhase('recording');
     const start = performance.now();
     while (performance.now() - start < BALANCE.durationMs) {
@@ -124,10 +135,10 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
       }
     }
     sinkRef.current = null;
+    buzz(CUE_OPEN);
     beep(880, 150);
     await sleep(220);
     beep(880, 150);
-    buzz([150, 80, 150]);
     say('Stop. Open your eyes.');
 
     pendingRef.current = samples;

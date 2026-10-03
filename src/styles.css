@@ -1052,3 +1052,27 @@ main { min-width: 0; }
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.3); font-size: calc(0.9rem * var(--text-scale));
 }
 @media (min-width: 641px) { .update-banner { bottom: 20px; } }
+
+/* ---------- Before you start (conditions) ---------- */
+.gate-before { display: grid; gap: 1rem; max-width: 640px; padding: 1.6rem; border-radius: var(--radius-lg); }
+.gate-before h2 { margin: 0; font-size: calc(1.9rem * var(--text-scale)); outline: none; }
+.gate-before p { margin: 0; }
+.question { border: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.question legend { font-weight: 700; margin-bottom: 0.5rem; padding: 0; }
+.choices { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.choices button { box-shadow: 0 3px 0 0 var(--border-strong); }
+.choices button.on { border-color: var(--accent); background: var(--accent-dim); color: var(--mint-ink); box-shadow: 0 3px 0 0 var(--accent-depth); }
+.hint { color: var(--warn); font-size: calc(0.92rem * var(--text-scale)); }
+.gate-before .callout { margin: 0; }
+.rest-timer { justify-items: start; }
+.rest-count { font-family: var(--serif); font-size: calc(4.5rem * var(--text-scale)); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+
+/* Baseline sanity warning */
+.concerns { display: grid; gap: 0.5rem; color: var(--text); }
+.concerns b { color: var(--warn); }
+.concerns ul { margin: 0; padding-left: 1.2rem; }
+.concerns .row { margin-top: 0.25rem; }
+
+/* Conditions tags on a result */
+.cond-tags { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+.cond-tags .chip.warn { background: color-mix(in srgb, #f59e0b 12%, var(--surface)); }

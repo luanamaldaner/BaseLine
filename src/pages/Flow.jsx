@@ -10,6 +10,8 @@ import { STATUS, overallStatus } from '../lib/status.js';
 import { say, hush, beep, unlockAudio } from '../lib/cues.js';
 import ResultCards from '../components/ResultCards.jsx';
 import { ActionCard } from '../components/ResultPanel.jsx';
+import { useConditions } from '../lib/conditions.js';
+import { baselineConcerns } from '../lib/validity.js';
 
 // The three objective tests, one after the other, for an athlete who may be
 // young or concussed: one instruction per screen, every instruction spoken,
@@ -270,6 +272,8 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
 function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [concerns, setConcerns] = useState(null); // why these baselines look off, before saving
+  const conditions = useConditions();
   const [saved, setSaved] = useState(null); // { kind: 'baseline' } | { kind: 'check', byTest }
 
   const done = STEPS.filter((s) => results[s.id]?.ok);
@@ -291,8 +295,16 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const overall = overallStatus(calls);
   const status = overall && STATUS[overall];
 
-  function saveAllBaseline() {
-    for (const s of done) saveBaseline(tid(s), results[s.id].metrics);
+  function saveAllBaseline(force = false) {
+    if (!force) {
+      const c = [
+        ...(conditions?.rested === false ? ['They hadn’t rested since exercising, which drags scores down.'] : []),
+        ...done.flatMap((s) => baselineConcerns(tid(s), results[s.id].metrics).map((m) => `${s.title}: ${m}`)),
+      ];
+      if (c.length) return setConcerns(c);
+    }
+    setConcerns(null);
+    for (const s of done) saveBaseline(tid(s), results[s.id].metrics, conditions);
     setSaved({ kind: 'baseline' });
   }
 
@@ -301,7 +313,7 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
     setError(null);
     try {
       const byTest = {};
-      for (const s of done) byTest[s.id] = await submitCheck(subject.uid, tid(s), results[s.id].metrics);
+      for (const s of done) byTest[s.id] = await submitCheck(subject.uid, tid(s), results[s.id].metrics, conditions);
       setSaved({ kind: 'check', byTest });
     } catch (e) {
       setError(e?.message || 'Something went wrong. Try again.');
@@ -332,6 +344,17 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
       )}
 
       {error && <div className="callout danger">{error}</div>}
+      {concerns && (
+        <div className="callout warn concerns" role="alert">
+          <b>This doesn’t look like a typical healthy baseline.</b>
+          <ul>{concerns.map((c) => <li key={c}>{c}</li>)}</ul>
+          <span className="small">Baselines should be the athlete’s best effort: a poor one makes later checks look fine.</span>
+          <div className="row">
+            <button className="primary" onClick={onDone}>Don’t save, start again</button>
+            <button className="ghost" onClick={() => saveAllBaseline(true)}>Save anyway</button>
+          </div>
+        </div>
+      )}
 
       {saved ? (
         <p className="saved">
@@ -341,7 +364,7 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
       ) : (
         <div className="row">
           {isSelf && (
-            <button className="primary big-btn" onClick={saveAllBaseline} disabled={busy}>
+            <button className="primary big-btn" onClick={() => saveAllBaseline()} disabled={busy}>
               Save all as baseline
             </button>
           )}

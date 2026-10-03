@@ -281,22 +281,37 @@ export function syncRanges(subjectUid) {
 
 function addTrialDoc(trial) {
   const ref = doc(collection(db, 'teams', state.profile.teamId, 'trials'));
-  setDoc(ref, trial).catch((e) => set({ error: `Saving failed: ${e.message}` }));
+  const fail = (e) => set({ error: `Saving failed: ${e.message}` });
+  setDoc(ref, trial).catch((e) => {
+    // Rules deployed before the conditions tag existed reject it; save the
+    // result without the tag rather than lose it.
+    if (e.code === 'permission-denied' && trial.conditions) {
+      const { conditions, ...plain } = trial; // eslint-disable-line no-unused-vars
+      setDoc(ref, plain).catch(fail);
+    } else fail(e);
+  });
   return { id: ref.id, ...trial };
 }
 
+// Optional testing-conditions tag (see lib/conditions.js); left off if empty.
+const withConditions = (trial, conditions) =>
+  conditions && Object.keys(conditions).length ? { ...trial, conditions } : trial;
+
 // Your own baseline. Works offline; syncs later.
-export function saveBaseline(test, metrics) {
-  return addTrialDoc({ subjectUid: uid(), testerUid: uid(), test, kind: 'baseline', at: now(), metrics: clean(metrics) });
+export function saveBaseline(test, metrics, conditions) {
+  return addTrialDoc(withConditions(
+    { subjectUid: uid(), testerUid: uid(), test, kind: 'baseline', at: now(), metrics: clean(metrics) },
+    conditions,
+  ));
 }
 
 // A post-hit check on anyone on the team (including yourself), judged on this
 // device against the subject's published cutoffs. Works offline.
 // Returns the call; plus the full comparison when the viewer may see data.
-export async function submitCheck(subjectUid, test, metrics) {
+export async function submitCheck(subjectUid, test, metrics, conditions) {
   const m = clean(metrics);
   const status = judge(state.ranges.get(`${subjectUid}_${test}`), m);
-  addTrialDoc({ subjectUid, testerUid: uid(), test, kind: 'check', at: now(), metrics: m, status });
+  addTrialDoc(withConditions({ subjectUid, testerUid: uid(), test, kind: 'check', at: now(), metrics: m, status }, conditions));
   const canSeeData = subjectUid === uid() || state.profile.role === 'coach';
   const comparison = canSeeData
     ? compareToSummary(summarize(baselinesOf(subjectUid, test)), m, SPECS[test])
