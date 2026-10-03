@@ -6,16 +6,20 @@ import {
   persistentMultipleTabManager,
 } from 'firebase/firestore';
 
-// Web app config. These values identify the project; they are not secrets.
-// Access is controlled by Firebase Auth + firestore.rules.
+// Web app config comes from .env.local (not committed; see .env.example).
+// Access to data is controlled by Firebase Auth + firestore.rules.
+const env = import.meta.env;
 const firebaseConfig = {
-  apiKey: 'AIzaSyB2Qxv_jX9ZWCv5SXU8RC4V_Xd5-wawoPY',
-  authDomain: 'dte-hackathon.firebaseapp.com',
-  projectId: 'dte-hackathon',
-  storageBucket: 'dte-hackathon.firebasestorage.app',
-  messagingSenderId: '238436929454',
-  appId: '1:238436929454:web:2a904c1d1b06b2bac1c23f',
+  apiKey: env.VITE_FIREBASE_API_KEY,
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: env.VITE_FIREBASE_APP_ID,
 };
+if (!firebaseConfig.apiKey) {
+  throw new Error('Missing Firebase config: copy .env.example to .env.local and fill it in.');
+}
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);

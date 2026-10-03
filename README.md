@@ -51,6 +51,9 @@
 - Our work is the measurement layer: iris-position signal, calibration (simple regression from a few fixation points), pursuit and sway metrics, baseline comparison.
 
 ## Running it
+First copy `.env.example` to `.env.local` and fill in the Firebase web config (ask a
+teammate, or run `firebase apps:sdkconfig WEB --project dte-hackathon`).
+
 ```bash
 npm install          # also copies MediaPipe's wasm into public/
 npm run dev          # http://localhost:5173 (laptop webcam)
