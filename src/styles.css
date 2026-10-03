@@ -172,5 +172,26 @@ footer { margin-top: 2rem; text-align: center; }
 .card-explain { margin: 0; font-size: 0.88rem; color: var(--muted); }
 .card-compare { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 600; }
 .chip { font-size: 0.75rem; font-weight: 700; padding: 0.1rem 0.55rem; border-radius: 999px; border: 1px solid currentColor; }
+/* Reaction test */
+.reaction-head { justify-content: space-between; margin: 0 0 0.5rem; }
+.reaction-intro { max-width: 520px; }
+.reaction-pad {
+  height: min(60vh, 460px); border-radius: 16px; display: grid; place-items: center;
+  font-size: clamp(1.4rem, 4vw, 2.4rem); font-weight: 700; color: #fff;
+  user-select: none; -webkit-user-select: none; touch-action: none; cursor: pointer;
+  background: #3a4150;
+}
+.reaction-pad[data-state='wait'] { background: #b42318; }
+.reaction-pad[data-state='go'] { background: #079455; }
+.reaction-pad[data-state='bad'] { background: #b54708; }
+.reaction-pad[data-state='shown'] { background: #344054; }
+.tap-strip {
+  display: flex; align-items: flex-end; gap: 4px; height: 160px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 12px 4px;
+}
+.tap-bar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; min-width: 0; }
+.tap-bar div { width: 100%; background: var(--accent); border-radius: 4px 4px 0 0; }
+.tap-bar span { font-size: 0.65rem; color: var(--muted); margin-top: 2px; }
+
 .plot-wrap h3 { margin: 0.5rem 0 0.25rem; }
 .plot-wrap p { margin: 0 0 0.5rem; }

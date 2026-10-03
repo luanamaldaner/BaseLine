@@ -72,8 +72,8 @@ export default function ResultCards({ metrics, spec, comparison }) {
         })}
       </div>
       <p className="muted small">
-        Good / OK / Poor are rough guides for a webcam test, not medical cutoffs. The real check
-        is comparing an athlete to their own baseline.
+        Good / OK / Poor are rough guides, not medical cutoffs. The real check is comparing an
+        athlete to their own baseline.
       </p>
     </div>
   );

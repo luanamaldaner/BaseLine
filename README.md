@@ -62,6 +62,7 @@ The face model ships in `public/models/`, so the app works offline.
 ```
 src/lib/baseline.js          per-athlete trials, baseline mean/SD, z-score comparison
 src/components/ResultCards   plain-language result cards + Normal / Monitor / Refer banner
+src/components/SaveTrial     save as baseline / post-hit check, baseline progress
 src/tests/eye/               eye pursuit (working)
   faceTracker.js             webcam -> MediaPipe -> iris position within each eye
   pursuit.js                 dot motion, calibration fit, gain / lag / saccade metrics

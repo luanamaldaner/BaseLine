@@ -3,12 +3,12 @@ import { createLandmarker, openCamera, startTracking, EYES } from './faceTracker
 import {
   PURSUIT, CALIBRATION, METRICS, targetX, fitCalibration, frameIssue, computePursuit,
 } from './pursuit.js';
-import { addTrial, compare, summarizeBaseline } from '../../lib/baseline.js';
+import { compare, summarizeBaseline } from '../../lib/baseline.js';
 import TracePlot from './TracePlot.jsx';
 import ResultCards from '../../components/ResultCards.jsx';
+import SaveTrial, { BaselineProgress, NoBaselineNote } from '../../components/SaveTrial.jsx';
 
 const TEST = 'eye';
-const BASELINE_TRIALS = 3;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export default function EyeTest({ athlete }) {
@@ -25,8 +25,7 @@ export default function EyeTest({ athlete }) {
   const [stageText, setStageText] = useState('');
   const [live, setLive] = useState(null);
   const [result, setResult] = useState(null);
-  const [savedKind, setSavedKind] = useState(null);
-  const [, bump] = useState(0); // re-render after saving a trial
+  const [runId, setRunId] = useState(0); // fresh save buttons per run
 
   const setPhase = (p) => {
     phaseRef.current = p;
@@ -109,7 +108,7 @@ export default function EyeTest({ athlete }) {
   async function runTest() {
     abortRef.current = false;
     setResult(null);
-    setSavedKind(null);
+    setRunId((n) => n + 1);
     try {
       await document.documentElement.requestFullscreen?.();
     } catch {
@@ -180,15 +179,6 @@ export default function EyeTest({ athlete }) {
     }
   }
 
-  function save(kind) {
-    if (!result?.ok) return;
-    addTrial(athlete, TEST, kind, result.metrics);
-    setSavedKind(kind);
-    bump((n) => n + 1);
-  }
-
-  const base = summarizeBaseline(athlete, TEST);
-  const baseN = base?.n ?? 0;
   const testing = phase === 'calibrate' || phase === 'pursuit';
   const quality = result?.ok ? qualityWarnings(result) : [];
 
@@ -233,10 +223,7 @@ export default function EyeTest({ athlete }) {
               {phase === 'results' ? 'Run again' : 'Start test'}
             </button>
           </div>
-          <p className="muted small">
-            Baseline: {Math.min(baseN, BASELINE_TRIALS)} of {BASELINE_TRIALS} trials recorded
-            {baseN >= BASELINE_TRIALS ? ' ✓' : ''}
-          </p>
+          {phase !== 'results' && <BaselineProgress athlete={athlete} test={TEST} />}
         </div>
       </div>
 
@@ -262,12 +249,7 @@ export default function EyeTest({ athlete }) {
                 </div>
               )}
 
-              {!result.comparison && (
-                <div className="callout">
-                  <b>No baseline yet for {athlete}.</b> Save this as a baseline trial. Record{' '}
-                  {BASELINE_TRIALS} while healthy; later tests are compared to them.
-                </div>
-              )}
+              {!result.comparison && <NoBaselineNote athlete={athlete} />}
 
               <ResultCards metrics={result.metrics} spec={METRICS} comparison={result.comparison} />
 
@@ -281,23 +263,13 @@ export default function EyeTest({ athlete }) {
                 <TracePlot trace={result.trace} />
               </div>
 
-              {savedKind ? (
-                <p className="saved">
-                  Saved as {savedKind === 'baseline' ? 'a baseline trial' : 'a post-hit check'}.
-                </p>
-              ) : (
-                <div className="row">
-                  <button className="primary" onClick={() => save('baseline')}>
-                    Save as baseline trial
-                  </button>
-                  <button onClick={() => save('check')} disabled={!base}>
-                    Save as post-hit check
-                  </button>
-                  <button className="ghost" onClick={() => { setResult(null); setPhase('preview'); }}>
-                    Discard
-                  </button>
-                </div>
-              )}
+              <SaveTrial
+                key={runId}
+                athlete={athlete}
+                test={TEST}
+                metrics={result.metrics}
+                onDiscard={() => { setResult(null); setPhase('preview'); }}
+              />
               <p className="muted small">
                 Calibration fit {(result.calib.r2 * 100).toFixed(0)}% · usable frames{' '}
                 {(result.validFraction * 100).toFixed(0)}%
