@@ -520,14 +520,26 @@ export function syncRanges(subjectUid) {
       const lim = limitsFrom(summarize(baselinesOf(subjectUid, test)), SPECS[test]);
       const current = state.rangesByTeam.get(teamId)?.get(id);
       const ref = doc(db, 'teams', teamId, 'ranges', id);
+      const key = `${teamId}/${id}`;
+      if (rangesInFlight.has(key)) continue;
       if (!lim) {
-        if (current) withTimeout(deleteDoc(ref)).catch(() => {});
+        if (current) deleteDoc(ref).catch(() => {});
       } else if (!current || current.n !== lim.n || !sameLimits(current.limits, lim.limits)) {
-        withTimeout(setDoc(ref, { subjectUid, test, ...lim })).catch((e) => set({ error: `Saving cutoffs failed: ${e.message}` }));
+        // Queued like a result: on a slow connection the write sits in the
+        // outbox and goes through later; racing it against a timer reported
+        // "Saving cutoffs failed" on every trials update. Only a rejection
+        // from the server is a failure.
+        rangesInFlight.add(key);
+        notePending(1);
+        setDoc(ref, { subjectUid, test, ...lim })
+          .then(() => { if (state.error?.startsWith('Saving cutoffs')) set({ error: null }); })
+          .catch((e) => set({ error: `Saving cutoffs failed: ${e.message}` }))
+          .finally(() => { rangesInFlight.delete(key); notePending(-1); });
       }
     }
   }
 }
+const rangesInFlight = new Set();
 
 // A result is written to the local cache first and reaches the server when
 // the connection allows, so a slow or half-dead connection is NOT a failed
