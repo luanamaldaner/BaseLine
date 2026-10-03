@@ -26,7 +26,7 @@ The phone eye-test variant, **`eyePhone`**, has its own baseline, separate from 
 
 **Run all three** guides the athlete through reaction, eyes, then balance, with a combined save step and overall call. Spoken instructions are available for reaction and eyes and automatic for balance; beeps and vibration provide additional cues where supported. Individual tests are also available.
 
-Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at four trials per test: the first is practice and is not scored (the first attempt at an unfamiliar test is usually the worst), and scoring can use fewer.
+Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at three trials per test, and every trial counts toward the baseline.
 
 ## Roles and privacy
 
@@ -55,7 +55,7 @@ A consent screen explains screening limits and data use before first use, record
 
 [shared/assess.js](shared/assess.js) defines the metric directions, baseline summaries, published cutoffs, and per-test decisions.
 
-1. Compute each metric's mean and sample standard deviation across saved baseline trials, dropping the oldest as practice once more than three are on file.
+1. Compute each metric's mean and sample standard deviation across the saved baseline trials (three are recorded; all of them count).
 2. Use an effective spread equal to the largest of the standard deviation, 10% of the absolute mean, the metric's floor, and a tiny numerical floor (`1e-9`). Error and mistake counts have a spread floor of 1.
 3. Flag a metric only when it is more than **2 spreads worse** than the mean: above `mean + 2 × spread` for higher-is-worse metrics, or below `mean - 2 × spread` for lower-is-worse metrics.
 
@@ -108,7 +108,7 @@ The device type (phone or laptop) is saved too. Flagged conditions show as tags 
 
 **Pre-existing conditions** (prior concussions, ADHD, vision problems, vestibular or balance problems) shift what a normal result looks like and how long recovery takes. Athletes record them on the Team tab ([MedicalHistory](src/components/MedicalHistory.jsx)); the coach sees them beside that athlete's results. They are private to the athlete and each team?s coach (`teams/{id}/history/{uid}`), never on the roster teammates can read. Sessions merge history across teams by the newest `updatedAt` per athlete. Saving writes the same history to every current membership; joining another team copies the current history on a best-effort basis without blocking the join.
 
-**Practice effects:** the first baseline trial is usually the worst, and a bad first trial widens the baseline's spread and hides a later deficit. Four baseline trials are recorded and the oldest is dropped as practice (`summarize` in [shared/assess.js](shared/assess.js)); an older three-trial baseline keeps all three.
+**Practice effects:** the first attempt at an unfamiliar test is often the worst, and a bad early trial widens the baseline's spread and can hide a later deficit. Baselines are three trials and every trial counts. `PRACTICE_TRIALS` in [shared/assess.js](shared/assess.js) can drop leading trials from scoring if the team adds a warm-up trial; it is 0 for now. Reaction time has its own three unscored practice taps inside each run.
 
 **Other confounds to watch for** (not yet measured by the app): sleep, caffeine, medication, and age (re-baseline every season).
 
