@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTestRunning, useScreenTop } from '../../lib/focus.js';
-import { STANCES, BALANCE, METRICS, computeBalance } from './balance.js';
+import { STANCES, BALANCE, METRICS, computeBalance, scoreStance } from './balance.js';
 import { formatMetric } from '../../components/ResultCards.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { StanceDiagram } from '../../components/Icons.jsx';
@@ -37,6 +37,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
   const [stanceIdx, setStanceIdx] = useState(0);
   const [count, setCount] = useState(0);
   const [errorsSeen, setErrorsSeen] = useState(0);
+  const [stumblesFelt, setStumblesFelt] = useState(0); // the phone's count, shown on the errors screen
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [runId, setRunId] = useState(0);
@@ -142,7 +143,11 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
     say('Stop. Open your eyes.');
 
     pendingRef.current = samples;
-    setErrorsSeen(0);
+    // Start the examiner's count at what the phone already felt, so a step
+    // is never counted by both.
+    const felt = scoreStance(samples);
+    setStumblesFelt(felt.ok ? felt.stumbles : 0);
+    setErrorsSeen(felt.ok ? felt.stumbles : 0);
     setPhase('errors');
   }
 
@@ -253,10 +258,13 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
       {phase === 'errors' && (
         <div className="panel balance-stage">
           <p className="muted small">Stance {stanceIdx + 1} of {STANCES.length} done</p>
-          <h3 className="stance-title">Errors the examiner saw</h3>
+          <h3 className="stance-title">Errors</h3>
           <p className="muted">
-            Eyes opened, a step or stumble, forefoot or heel lifted, hands off the chest. The
-            phone adds big stumbles it felt on its own.
+            {stumblesFelt === 0
+              ? 'The phone felt no stumbles. '
+              : `The phone felt ${stumblesFelt} stumble${stumblesFelt === 1 ? '' : 's'} and started the count there. `}
+            Add anything else you saw — eyes opened, forefoot or heel lifted, hands off the chest,
+            a step the phone missed — or take one off if it felt a jolt that wasn’t a step.
           </p>
           <div className="stepper">
             <button onClick={() => setErrorsSeen((n) => Math.max(0, n - 1))} aria-label="One fewer">−</button>

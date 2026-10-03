@@ -33,7 +33,7 @@ export const BALANCE = {
 export const METRICS = {
   sway: {
     label: 'Sway',
-    unit: '',
+    unit: 'cm/s²', // RMS horizontal acceleration; stored in m/s², shown ×100
     digits: 0,
     scale: 100,
     worse: 'higher',
@@ -41,7 +41,7 @@ export const METRICS = {
   },
   singleSway: {
     label: 'Single-leg sway',
-    unit: '',
+    unit: 'cm/s²',
     digits: 0,
     scale: 100,
     worse: 'higher',
@@ -53,7 +53,7 @@ export const METRICS = {
     digits: 0,
     worse: 'higher',
     minSpread: 1,
-    explain: 'Stumbles the phone felt plus errors the examiner counted (eyes opened, foot moved). Lower is better.',
+    explain: 'Errors per the examiner: the phone\'s detected stumbles, adjusted for what the examiner saw (eyes opened, foot moved, hands off the chest). Lower is better.',
     rate: (v) => (v <= 3 ? 'good' : v <= 6 ? 'ok' : 'poor'),
   },
 };
@@ -120,12 +120,19 @@ export function scoreStance(samples) {
 }
 
 // stances: { [id]: { samples, taps } }
+//
+// `taps` is the examiner's final count for the stance. The entry screen
+// starts it at the number of stumbles the phone detected, so the examiner
+// adds only what the phone can't feel (eyes opened, hands off the chest, a
+// lifted heel) and can remove a jolt that wasn't a step. It is NOT added to
+// the phone's count again: that double-counted every step, and with a spread
+// floor of 1 on errors, three extra counts are enough to flag a check.
 export function computeBalance(stances) {
   const scored = {};
   for (const s of STANCES) {
     const r = scoreStance(stances[s.id]?.samples ?? []);
     if (!r.ok) return { ok: false, reason: `${s.label}: ${r.reason}` };
-    scored[s.id] = { ...r, taps: stances[s.id].taps, errors: r.stumbles + stances[s.id].taps };
+    scored[s.id] = { ...r, taps: stances[s.id].taps, errors: stances[s.id].taps };
   }
   const sways = STANCES.map((s) => scored[s.id].sway);
   return {

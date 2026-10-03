@@ -18,7 +18,7 @@ Athletes record healthy baseline trials, then repeat the tests after a hit. Base
 
 | Test | Device and procedure | Measurements |
 |---|---|---|
-| Balance | Phone motion sensor; phone against chest, eyes closed, three 20-second stances: feet together, single leg, heel-to-toe | Average sway, single-leg sway, detected stumbles plus examiner-counted errors |
+| Balance | Phone motion sensor; phone against chest, eyes closed, three 20-second stances: feet together, single leg, heel-to-toe | Average sway, single-leg sway (cm/s²), and errors: the examiner's count, pre-filled with the stumbles the phone detected so a step is never counted twice |
 | Reaction time | Phone or laptop; tap when the target turns green, with 3 practice and 15 scored trials | Median response time, spread of response times, early taps and missed signals |
 | Eye pursuit | Webcam or front camera; MediaPipe tracks eye landmarks through calibration and a moving-target task | Time on target, pursuit gain, catch-up saccade rate, lag; tracking error is stored but not scored |
 
