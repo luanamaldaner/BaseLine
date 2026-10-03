@@ -1124,17 +1124,20 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
   /* Header: logo + name + theme + log out on one row; team and who's
      logged in on a quiet second row. */
   .topbar {
-    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto;
-    align-items: center; gap: 6px 10px; padding: 12px 0 4px;
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+    align-items: center; gap: 6px 8px; padding: 12px 0 4px;
   }
   .topbar .brand, .topbar .athlete { display: contents; }
   .topbar .logo-mark { grid-area: 1 / 1; width: 34px; height: 34px; }
   .topbar .brand > span:not(.team-name) { grid-area: 1 / 2; font-size: calc(1.2rem * var(--text-scale)); font-weight: 700; }
-  .topbar .athlete > .theme-toggle { grid-area: 1 / 3; }
-  .topbar .athlete > button { grid-area: 1 / 4; }
+  /* Three controls, three cells. One shared cell put Tutorial on top of Log out. */
+  .topbar .athlete > .tutorial-btn { grid-area: 1 / 3; }
+  .topbar .athlete > .theme-toggle { grid-area: 1 / 4; }
+  .topbar .athlete > button:not(.tutorial-btn):not(.theme-toggle) { grid-area: 1 / 5; }
+  .topbar .tutorial-btn .tutorial-label { display: none; } /* the "?" badge alone; aria-label keeps the name */
   .topbar .team-name { grid-area: 2 / 1 / 3 / 3; justify-self: start; margin: 0; max-width: 100%; }
   .topbar .athlete > span {
-    grid-area: 2 / 3 / 3 / 5; justify-self: end; min-width: 0; max-width: 100%;
+    grid-area: 2 / 3 / 3 / 6; justify-self: end; min-width: 0; max-width: 100%;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .topbar .athlete > span .small { display: none; }

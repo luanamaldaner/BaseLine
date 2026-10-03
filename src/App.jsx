@@ -127,8 +127,8 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
               <span>
                 <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
               </span>
-              <button className="ghost small-btn tutorial-btn" data-tour="tutorial" onClick={() => setTouring(true)}>
-                <span aria-hidden>?</span> Tutorial
+              <button className="ghost small-btn tutorial-btn" data-tour="tutorial" aria-label="Tutorial" onClick={() => setTouring(true)}>
+                <span aria-hidden>?</span> <span className="tutorial-label">Tutorial</span>
               </button>
               <ThemeToggle />
               <button className="ghost small-btn" onClick={logOut}>Log out</button>
