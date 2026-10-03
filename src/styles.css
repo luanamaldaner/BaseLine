@@ -1185,3 +1185,21 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
 .legend-item { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .trend-legend .key { margin: 0 !important; flex: none; width: 10px; height: 10px; }
 .trend-legend .key.band { border-radius: 3px; }
+
+/* Multiple teams */
+.team-pages { display: grid; gap: 2rem; min-width: 0; }
+.team-tags { display: flex; flex-wrap: wrap; gap: .3rem; font-size: calc(12px * var(--text-scale)); }
+.team-tags .chip { white-space: normal; overflow-wrap: anywhere; }
+.team-page, .team-page h2, .run h3, .callout h2 { min-width: 0; overflow-wrap: anywhere; }
+.section-head select, .setup-form input { min-width: 0; max-width: 100%; }
+.team-pages .row { flex-wrap: wrap; }
+.team-name, .person-text { overflow-wrap: anywhere; }
+.team-pages .invite-qr { max-width: 100%; }
+@media (max-width: 640px) {
+  .athlete-card { grid-template-areas: 'av name chip' 'av meta ring' 'tags tags tags'; }
+  .athlete-card .athlete-main > .team-tags { grid-area: tags; margin-top: .4rem; }
+  .section-head { flex-wrap: wrap; }
+  .team-pages .member { grid-template-columns: minmax(0, 1fr) auto; }
+  .team-pages .trial-main { overflow-wrap: anywhere; }
+  .team-pages .code { font-size: calc(clamp(1.5rem, 7vw, 2.6rem) * var(--text-scale)); }
+}

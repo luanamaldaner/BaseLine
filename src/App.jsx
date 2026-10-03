@@ -1,16 +1,15 @@
 import { useState } from 'react';
 import { useScreenTop } from './lib/focus.js';
 import { HomeIcon, HistoryIcon, BookIcon, SymptomsIcon, UsersIcon } from './components/Icons.jsx';
-import { useSession, logOut } from './lib/session.js';
+import { useSession, logOut, teamIdsOf } from './lib/session.js';
 import AuthScreen from './pages/AuthScreen.jsx';
 import { ProfileSetup, TeamSetup } from './pages/Setup.jsx';
 import Overview, { Guide } from './pages/Overview.jsx';
 import History from './pages/History.jsx';
 import RunTest from './pages/RunTest.jsx';
-import { Roster, CoachTeam, AthleteTeam } from './pages/Team.jsx';
+import { Roster, CoachTeam, AthleteTeam, InviteOffer } from './pages/Team.jsx';
 import { Logo, APP_NAME } from './brand.jsx';
 import ThemeToggle from './components/ThemeToggle.jsx';
-import { pendingInvite, clearInvite } from './lib/invite.js';
 import { ConsentScreen, PrivacyDialog } from './pages/Privacy.jsx';
 import { useCoachAlerts } from './components/Alerts.jsx';
 
@@ -42,15 +41,11 @@ export default function App() {
   if (!s.authChecked) return <Splash text="Loading…" />;
   if (!s.user) return <AuthScreen />;
   if (s.profile === undefined) return <Splash text={s.error ?? 'Loading your account…'} />;
+  if (s.profileConfirmed === false) return <Splash text={s.error ?? 'Loading your account…'} />;
   if (!s.profile) return <ProfileSetup email={email} />;
   if (!s.profile.consentedAt) return <ConsentScreen email={email} />;
-  if (!s.profile.teamId) return <TeamSetup role={s.profile.role} email={email} />;
-  if (s.team === undefined || !s.trialsReady) return <Splash text="Loading your team…" />;
-  if (s.team === null) {
-    return <TeamSetup role={s.profile.role} email={email} notice="That team no longer exists." />;
-  }
-  // Already on a team: an invite link opened later has nothing left to do.
-  if (pendingInvite()) clearInvite();
+  if (!teamIdsOf(s.profile).length) return <TeamSetup role={s.profile.role} email={email} />;
+  if (s.teams.size < teamIdsOf(s.profile).length || !s.trialsReady) return <Splash text={s.error ?? 'Loading your teams…'} />;
   return s.profile.role === 'coach' ? <CoachApp s={s} /> : <AthleteApp s={s} />;
 }
 
@@ -66,7 +61,7 @@ function Splash({ text }) {
 // uid -> name for everyone this user can see (for "run by" labels).
 function nameMap(s) {
   const names = new Map([...s.members.values()].map((m) => [m.uid, m.name]));
-  names.set(s.team.coachUid, s.team.coachName);
+  for (const team of s.teams.values()) names.set(team.coachUid, team.coachName);
   names.set(s.user.uid, s.profile.name);
   return names;
 }
@@ -82,7 +77,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
           <header className="topbar">
             <div className="brand">
               <Logo /> <span>{APP_NAME}</span>
-              <span className="team-name">{s.team.name}</span>
+              <span className="team-name">{s.teams.size === 1 ? [...s.teams.values()][0].name : `${s.teams.size} teams`}</span>
             </div>
             <div className="athlete">
               <span>
@@ -108,7 +103,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
         </>
       )}
       {s.error && <div className="callout danger">{s.error}</div>}
-      <main>{children}</main>
+      <main>{!focus && s.profile.role === 'athlete' && <InviteOffer />}{children}</main>
       {!focus && (
         <footer className="muted small">
           Screening tool, not a diagnosis. Any athlete with a suspected concussion should be
@@ -127,7 +122,7 @@ function AthleteApp({ s }) {
   const [pick, setPick] = usePersisted('pick:athlete', { subjectUid: null, testId: null });
   useScreenTop(tab);
   const members = [...s.members.values()].sort((a, b) => a.name.localeCompare(b.name));
-  const people = [{ uid: me, name: s.profile.name }, ...members.filter((m) => m.uid !== me)];
+  const people = [{ uid: me, name: s.profile.name, teamIds: teamIdsOf(s.profile) }, ...members.filter((m) => m.uid !== me)];
   const openTest = (testId) => {
     setPick({ subjectUid: me, testId });
     setTab('test');
@@ -142,9 +137,9 @@ function AthleteApp({ s }) {
       tabs={[['me', 'My dashboard', 'Dashboard', HomeIcon], ['test', 'Run a test', 'Test', SymptomsIcon], ['history', 'My history', 'History', HistoryIcon], ['team', 'Team', 'Team', UsersIcon], ['learn', 'Learn more', 'Learn', BookIcon]]}
     >
       {tab === 'me' && <Overview subjectUid={me} isSelf onOpenTest={openTest} />}
-      {tab === 'test' && <RunTest people={people} selfUid={me} isCoach={false} pick={pick} setPick={setPick} />}
+      {tab === 'test' && <RunTest teams={s.teams} people={people} selfUid={me} isCoach={false} pick={pick} setPick={setPick} />}
       {tab === 'history' && <History subjectUid={me} subjectName={s.profile.name} isSelf names={nameMap(s)} />}
-      {tab === 'team' && <AthleteTeam team={s.team} members={members} />}
+      {tab === 'team' && <AthleteTeam teams={s.teams} members={members} />}
       {tab === 'learn' && <Guide />}
     </Frame>
   );
@@ -190,6 +185,7 @@ function CoachApp({ s }) {
       {tab === 'roster' && !selected && (
         <Roster
           members={members}
+          teams={s.teams}
           coachName={s.profile.name}
           onOpen={(uid) => { setPlayer(uid); setPlayerTab('dashboard'); }}
           alerts={alerts}
@@ -218,8 +214,8 @@ function CoachApp({ s }) {
           )}
         </section>
       )}
-      {tab === 'test' && <RunTest people={members} selfUid={null} isCoach pick={pick} setPick={setPick} />}
-      {tab === 'team' && <CoachTeam team={s.team} members={members} names={names} />}
+      {tab === 'test' && <RunTest teams={s.teams} people={members} selfUid={null} isCoach pick={pick} setPick={setPick} />}
+      {tab === 'team' && <CoachTeam teams={s.teams} members={members} names={names} />}
       {tab === 'learn' && <Guide />}
     </Frame>
   );

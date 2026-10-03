@@ -7,7 +7,9 @@ rules_version = '2';
 // Collection: users/{uid}                     (private profile)
 //   - role:   string, 'coach' | 'athlete' (set once, immutable)
 //   - name:   string (1-60) - display name
-//   - teamId: string | null - the one team this user coaches or belongs to
+//   - teamId: string | null - first team, retained for older clients
+//   - teamIds: list<string> (up to 10), optional on legacy profiles
+//   - coachUids: list<string> (up to 20), athletes only
 //   - consentedAt: string, ISO-8601 (optional) - when they agreed to the
 //                  privacy notice; added once, after the profile is created
 //
@@ -29,7 +31,11 @@ rules_version = '2';
 //   - joinedAt: string, ISO-8601
 //   Team names are visible to everyone on the team (needed to pick who to test).
 //
-// Collection: teams/{teamId}/trials/{trialId}
+// Collection: users/{uid}/trials/{trialId}
+//   Trial fields below, plus teamId (string for checks, null for baselines).
+//   Owner and coaches in the athlete profile may read and delete.
+//
+// Collection: teams/{teamId}/trials/{trialId} (legacy, unchanged)
 //   - subjectUid: string - athlete the result belongs to
 //   - testerUid:  string - who ran the test
 //   - test:       'balance' | 'reaction' | 'eye' | 'eyePhone'
@@ -53,8 +59,9 @@ rules_version = '2';
 //   - limits:     map metric -> { worse: 'higher' | 'lower', limit: number }
 //   Readable by the team; written by the athlete it describes or the coach.
 //
-// Queries: athletes list trials where subjectUid == their uid; the coach
-// lists all of the team's trials; team members list members and ranges.
+// Queries: athletes read their own record; coaches read each athlete record.
+// Legacy queries filter by subjectUid for athletes, or list teams for coaches.
+// Team members list members and ranges.
 //
 // ===============================================================
 
@@ -135,10 +142,65 @@ service cloud.firestore {
     // Domain Validators
     // ===============================================================
 
+    function validIds(xs, maximum) {
+      return xs is list && xs.size() <= maximum &&
+        (xs.size() <= 0 || xs[0] is string) &&
+        (xs.size() <= 1 || xs[1] is string) &&
+        (xs.size() <= 2 || xs[2] is string) &&
+        (xs.size() <= 3 || xs[3] is string) &&
+        (xs.size() <= 4 || xs[4] is string) &&
+        (xs.size() <= 5 || xs[5] is string) &&
+        (xs.size() <= 6 || xs[6] is string) &&
+        (xs.size() <= 7 || xs[7] is string) &&
+        (xs.size() <= 8 || xs[8] is string) &&
+        (xs.size() <= 9 || xs[9] is string) &&
+        (xs.size() <= 10 || xs[10] is string) &&
+        (xs.size() <= 11 || xs[11] is string) &&
+        (xs.size() <= 12 || xs[12] is string) &&
+        (xs.size() <= 13 || xs[13] is string) &&
+        (xs.size() <= 14 || xs[14] is string) &&
+        (xs.size() <= 15 || xs[15] is string) &&
+        (xs.size() <= 16 || xs[16] is string) &&
+        (xs.size() <= 17 || xs[17] is string) &&
+        (xs.size() <= 18 || xs[18] is string) &&
+        (xs.size() <= 19 || xs[19] is string);
+    }
+
+    function joinedAfter(userId, teamId) {
+      let p = getAfter(/databases/$(database)/documents/users/$(userId)).data;
+      return teamId in p.get('teamIds', []) || legacyJoin(userId, teamId);
+    }
+
+    function legacyJoin(userId, teamId) {
+      // Older clients only change teamId, even after profile migration.
+      let p = getAfter(/databases/$(database)/documents/users/$(userId)).data;
+      let before = get(/databases/$(database)/documents/users/$(userId)).data;
+      return p.teamId == teamId && p.get('teamIds', []) == before.get('teamIds', []);
+    }
+
+    function recordCoach(userId) {
+      return isAuthenticated() && request.auth.uid in
+        get(/databases/$(database)/documents/users/$(userId)).data.get('coachUids', []);
+    }
+
+    function validRecord(d, userId) {
+      return d.subjectUid == userId && d.testerUid is string &&
+        d.test in ['balance', 'reaction', 'eye', 'eyePhone'] &&
+        isValidDateString(d.at) && isValidMetrics(d.test, d.metrics) && (
+          (d.kind == 'baseline' && d.teamId == null &&
+            hasTrialFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics', 'teamId'])) ||
+          (d.kind == 'check' && d.teamId is string &&
+            d.status in ['normal', 'monitor', 'refer', 'no-baseline'] &&
+            hasTrialFields(d, ['subjectUid', 'testerUid', 'test', 'kind', 'at', 'metrics', 'teamId', 'status']))
+        );
+    }
+
     function isValidUser(d) {
       return d.keys().hasAll(['role', 'name', 'teamId']) &&
-        d.keys().hasOnly(['role', 'name', 'teamId', 'consentedAt']) &&
+        d.keys().hasOnly(['role', 'name', 'teamId', 'teamIds', 'coachUids', 'consentedAt']) &&
         (!('consentedAt' in d) || isValidDateString(d.consentedAt)) &&
+        (!('teamIds' in d) || validIds(d.teamIds, 10)) &&
+        (!('coachUids' in d) || (d.role == 'athlete' && validIds(d.coachUids, 20))) &&
         d.role in ['coach', 'athlete'] &&
         validName(d.name) &&
         (d.teamId == null || (d.teamId is string && d.teamId.size() <= 128));
@@ -216,23 +278,25 @@ service cloud.firestore {
       // New profiles start without a team.
       allow create: if isOwner(userId) && isValidUser(request.resource.data) &&
         request.resource.data.teamId == null;
-      // Role never changes. teamId may stay, be cleared (leave/removed), or be
-      // set from null to a team the user has actually joined or created.
+      // Role and recorded consent never change; both profile generations work.
       allow update: if isOwner(userId) && isValidUser(request.resource.data) &&
         request.resource.data.role == resource.data.role &&
         (!('consentedAt' in resource.data) ||
-          request.resource.data.get('consentedAt', null) == resource.data.consentedAt) &&
-        (
-          request.resource.data.teamId == resource.data.teamId ||
-          request.resource.data.teamId == null ||
-          (resource.data.teamId == null && (
-            (resource.data.role == 'athlete' &&
-              existsAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)/members/$(userId))) ||
-            (resource.data.role == 'coach' &&
-              getAfter(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.coachUid == userId)
-          ))
-        );
+          request.resource.data.get('consentedAt', null) == resource.data.consentedAt);
       allow delete: if false;
+    }
+
+    match /users/{userId}/trials/{trialId} {
+      allow read, delete: if isOwner(userId) || recordCoach(userId);
+      allow create: if isAuthenticated() && validRecord(request.resource.data, userId) && (
+        isOwner(userId) || (
+          request.resource.data.kind == 'check' &&
+          request.resource.data.testerUid == request.auth.uid &&
+          (isMember(request.resource.data.teamId) || isCoach(request.resource.data.teamId)) &&
+          exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId)/members/$(userId))
+        )
+      );
+      allow update: if false;
     }
 
     match /joinCodes/{code} {
@@ -248,8 +312,9 @@ service cloud.firestore {
     }
 
     match /teams/{teamId} {
-      allow read: if isCoach(teamId) || isMember(teamId);
-      // Only a coach without a team can create one, with its join code.
+      allow get: if isAuthenticated();
+      allow list: if isCoach(teamId) || isMember(teamId);
+      // A coach creates each team with its join code and profile link.
       allow create: if isAuthenticated() &&
         hasExactFields(request.resource.data, ['name', 'coachUid', 'coachName', 'code', 'createdAt']) &&
         request.resource.data.coachUid == request.auth.uid &&
@@ -258,23 +323,23 @@ service cloud.firestore {
         validCode(request.resource.data.code) &&
         isValidDateString(request.resource.data.createdAt) &&
         userDoc().role == 'coach' &&
-        userDoc().teamId == null &&
-        getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.teamId == teamId &&
+        joinedAfter(request.auth.uid, teamId) &&
         getAfter(/databases/$(database)/documents/joinCodes/$(request.resource.data.code)).data.teamId == teamId;
       allow update, delete: if false;
 
       match /members/{memberUid} {
         allow read: if isCoach(teamId) || isMember(teamId);
-        // An athlete with no team joins with the right code, updating their
-        // profile's teamId in the same batch.
+        allow get: if isOwner(memberUid);
+        // Join with the code and add the team and coach to the profile.
         allow create: if isOwner(memberUid) &&
           hasExactFields(request.resource.data, ['name', 'code', 'joinedAt']) &&
           validName(request.resource.data.name) &&
           isValidDateString(request.resource.data.joinedAt) &&
           request.resource.data.code == teamDoc(teamId).code &&
           userDoc().role == 'athlete' &&
-          userDoc().teamId == null &&
-          getAfter(/databases/$(database)/documents/users/$(memberUid)).data.teamId == teamId;
+          joinedAfter(memberUid, teamId) &&
+          (legacyJoin(memberUid, teamId) ||
+            teamDoc(teamId).coachUid in getAfter(/databases/$(database)/documents/users/$(memberUid)).data.coachUids);
         allow update: if false;
         // Leave the team yourself, or be removed by the coach.
         allow delete: if isOwner(memberUid) || isCoach(teamId);
@@ -307,6 +372,6 @@ service cloud.firestore {
       }
     }
 
-    // Everything else (including the old users/{uid}/trials) is denied.
+    // Everything else is denied.
   }
 }

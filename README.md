@@ -30,19 +30,21 @@ Dashboards show baseline progress and trends. History includes saved results, de
 
 ## Roles and privacy
 
-Coaches create teams. Athletes join with a six-character code or a QR invite opening `?join=CODE`; the invite survives signup so they do not need to retype it.
+Coaches create and manage up to ten teams. Athletes can join up to ten teams with a six-character code or a QR invite opening `?join=CODE`; the invite survives signup and offers another team to athletes who are already signed in. Each athlete has one result record shared with the coaches of all their teams, so joining another team never requires new baselines.
 
 | Capability | Athlete | Coach |
 |---|---|---|
 | Record a baseline | Own baseline only | Cannot record athletes' baselines |
-| Run a post-hit check | Self or any teammate | Any athlete on the team |
-| View saved scores, trends, and history | Own results only | Everyone on the team |
-| Delete results | Own results | Any result on the team |
-| Manage membership | Leave the team | Invite or remove athletes |
+| Run a post-hit check | Self or anyone on any shared team | Any athlete on any coached team |
+| View saved scores, trends, and history | Own results only | Full records of athletes on coached teams |
+| Delete results | Own results | Results of athletes whose profile grants access |
+| Manage membership | Join or leave individual teams | Create teams, invite or remove athletes per team |
+
+Coach Home combines all athletes, flagged first, with team tags and a team filter. The Team tab has a separate roster and invite card for every team. The check picker groups athletes by team; someone on multiple teams may appear in multiple groups, but still has only one result record.
 
 A teammate running a check sees **only the call and action, never the athlete's numerical results in the UI**. The testing device processes the new measurements and judges them against published baseline cutoffs in `teams/{id}/ranges`. These documents contain cutoffs and baseline trial counts, not trial results. The new result is saved for the athlete and coach; the teammate cannot read it back.
 
-[Firestore rules](firestore.rules) enforce result access, baseline ownership, allowed fields, and deletion rights. Athletes query only their own trials; coaches can query the team's trials. Team members can read the roster and published ranges. This protects stored results, but the tester's device still handles the current measurement and computes its status.
+[Firestore rules](firestore.rules) enforce result access, allowed fields, and deletion rights. Athletes query only their own trials; coaches subscribe once per athlete across their teams. Teammates can submit checks but cannot read another athlete's record. Team members can read rosters and published ranges; the athlete publishes cutoffs to every team they belong to. This protects stored results, but the tester's device still handles the current measurement and computes its status.
 
 Coaches receive in-app alerts for checks run by others that return Monitor, Refer, or No baseline. Optional browser notifications work while the app is open, including in a background tab.
 
@@ -107,15 +109,24 @@ Fields and permissions are defined in the header and validators of [firestore.ru
 
 ```text
 users/{uid}
-  role: coach | athlete (immutable), name, teamId: string | null
+  role: coach | athlete (immutable), name
+  teamIds: list<string>           # up to 10; source of truth on new clients
+  teamId: string | null          # retained first team for older clients
+  coachUids: list<string>        # athletes only, up to 20; record readers
   consentedAt?: ISO timestamp
+  trials/{trialId}
+    subjectUid, testerUid, test, kind: baseline | check, at, metrics
+    teamId: string | null        # shared team for checks; null for baselines
+    status: normal | monitor | refer | no-baseline   # checks only
+    conditions?: { rested: bool, place: quiet | sideline,
+                   light: indoor | shade | sun, device: phone | laptop }
 joinCodes/{code}
   teamId                         # signed-in single-code lookup; no listing
 teams/{id}
   name, coachUid, coachName, code, createdAt
   members/{uid}
     name, code, joinedAt
-  trials/{trialId}
+  trials/{trialId}               # legacy; new clients read and merge by id
     subjectUid, testerUid, test, kind: baseline | check, at, metrics
     status: normal | monitor | refer | no-baseline   # checks only
     conditions?: { rested: bool, place: quiet | sideline,
@@ -132,6 +143,10 @@ teams/{id}
 | `balance` | `sway`, `singleSway`, `errors` |
 | `reaction` | `medianMs`, `spreadMs`, `mistakes` |
 | `eye`, `eyePhone` | `onTarget`, `gain`, `saccadeRate`, `lagMs`, `trackingError` |
+
+Profiles without `teamIds` fall back to their legacy `teamId`. After a server-confirmed login, an athlete's legacy trials are copied into their own record with the original IDs, skipping existing documents. Checks gain the old team ID and baselines gain `teamId: null`; metrics, tester, timestamps, status, and conditions stay intact. Only after copying succeeds are `teamIds` and `coachUids` added. Coaches only need the profile update. This runs in the background, retries failures, and never deletes legacy data. Reads continue merging both locations, so older clients' new results remain visible within that team's access. A verified team joined by an older client after migration is reconciled on the next new-client session.
+
+Owners alone can change profiles. Removing an athlete deletes their membership immediately; their next connected session cleans up the team and coach lists. Leaving also copies any remaining own legacy trials before dropping the team from the profile. Until cleanup, a removed coach can still read the new record if their UID remains in `coachUids`. A coach shared by another remaining team keeps access. Legacy result access remains unchanged, including the original coach's access after departure.
 
 ## Running locally
 
@@ -153,7 +168,13 @@ npm run dev:phone
 
 Open the HTTPS network URL printed by Vite on the phone and accept the local development certificate if prompted. Grant camera/motion permissions as requested; phone mode uses a self-signed HTTPS certificate.
 
-For logged-in screen previews without an account, development builds expose the **`__previewSession`** browser-console hook from [src/lib/session.js](src/lib/session.js). It accepts a partial session state with mock profile, team, and `Map` data. This changes local UI state only; it does not authenticate Firebase writes and is omitted from production builds.
+For logged-in screen previews without an account, development builds expose the **`__previewSession`** browser-console hook from [src/lib/session.js](src/lib/session.js). It accepts a partial session state with mock profile, `teams`, `members`, `trials`, and `ranges` maps. Members include their `teamIds`; set `trialsReady: true` to preview dashboards. This changes local UI state only; it does not authenticate Firebase writes and is omitted from production builds.
+
+Run the local session regression checks without contacting the live project:
+
+```bash
+node --test scripts/session.test.mjs
+```
 
 ### Deployment
 
@@ -171,6 +192,18 @@ firebase deploy --only firestore:rules
 ```
 
 [firebase.json](firebase.json) serves `dist/` on the `baselinetest` Hosting site, rewrites routes to `index.html`, and points to `firestore.rules`.
+
+### Multiple-team rollout
+
+Publish compatible rules before publishing the new client. Validate the rules with `firebase deploy --only firestore:rules --dry-run --non-interactive` first. Older clients interact with the new rules at these paths:
+
+- `users/{uid}`: reads, initial profile creation, consent, and legacy `teamId` updates remain permitted. New list fields are optional for legacy profiles; role and recorded consent remain immutable.
+- `teams/{teamId}` and `joinCodes/{code}`: the old atomic create-team batch remains valid through the legacy profile-link branch. Code lookups remain signed-in single-document reads; codes cannot be listed or changed. Signed-in single-team reads also support invite previews before joining; team listing stays restricted.
+- `teams/{teamId}/members/{uid}`: old code-based join batches remain valid, including clients that only update `teamId`. Roster reads, self-leave, and coach removal remain supported. An athlete can also read their own missing membership to detect removal.
+- `teams/{teamId}/trials/{trialId}`: the legacy read, create, delete, and no-update rules and validators are unchanged, including conditions and `eyePhone`. New clients merge those results by ID with the athlete record and track both copies for deletion.
+- `teams/{teamId}/ranges/{rangeId}`: shapes and permissions are unchanged, so older clients can publish and judge checks as before.
+
+Older clients do not read `users/{uid}/trials`; they will not display results written only by the new client. Refresh clients to see the complete shared record. Before an athlete's first migration, coaches can still see that athlete's legacy results on their own teams. Late legacy writes are readable through that team's legacy merge; coaches of other teams cannot read those legacy documents until copied into the athlete record. These are limits of retaining legacy permissions and making new writes only to the new location.
 
 ## Code layout
 
@@ -206,5 +239,5 @@ shared/
 
 - **Clinical validation:** measure repeatability and compare screening calls with clinician assessments before claiming diagnostic accuracy or effectiveness.
 - **Trusted scoring:** move teammate-check scoring to a Cloud Function so a tampered phone cannot submit a fabricated status. Current rules validate access and data shape, not the calculation.
-- **Multiple teams per athlete/coach (in progress):** the current schema and rules support one team per account.
+- **Rollout follow-up:** refresh older clients, verify athlete migrations, and monitor legacy writes before considering retirement of the legacy result location. Immediate coach-access revocation would require changing the owner-only profile model or adding a trusted service.
 - **Measurement quality:** device latency, lighting, head motion, sensor support, fatigue, and test setup can affect results. Keep baseline and check conditions consistent. Skipped tests or missing metrics reduce what the overall call covers.
