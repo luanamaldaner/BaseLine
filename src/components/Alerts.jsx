@@ -83,7 +83,7 @@ export function AlertsPanel({ unread, names, onOpen, onDismiss, onDismissAll }) 
         const by = names.get(a.testerUid);
         return (
           <div className="alert-card" data-level={lv.cls} key={a.id}>
-            <Avatar name={name} />
+            <Avatar name={name} uid={a.subjectUid} />
             <div className="alert-main">
               <b>{name} · <span className={lv.cls}>{lv.title}</span></b>
               <span className="muted small">

@@ -57,7 +57,7 @@ A consent screen explains screening limits and data use before first use, record
 
 1. Compute each metric's mean and sample standard deviation across the saved baseline trials (three are recorded; all of them count).
 2. Use an effective spread equal to the largest of the standard deviation, 10% of the absolute mean, the metric's floor, and a tiny numerical floor (`1e-9`). Error and mistake counts have a spread floor of 1.
-3. Flag a metric only when it is more than **2 spreads worse** than the mean: above `mean + 2 × spread` for higher-is-worse metrics, or below `mean - 2 × spread` for lower-is-worse metrics.
+3. Flag a metric only when it is more than **3 spreads worse** than the mean: above `mean + 3 × spread` for higher-is-worse metrics, or below `mean - 3 × spread` for lower-is-worse metrics. (It was 2; see the false-alarm numbers below.)
 
 | Flagged metrics in one test | Call |
 |---|---|
@@ -65,22 +65,22 @@ A consent screen explains screening limits and data use before first use, record
 | 1 | Monitor |
 | 2 or more | Remove from play and refer |
 
-The [overall call](src/lib/status.js) is Refer if any included test is Refer or at least two tests are Monitor; one Monitor yields Monitor. Otherwise it is Normal. A check without a baseline is stored as `no-baseline`, instructs removal from play, and counts as Refer overall. There is no team-average fallback. Missing or non-finite metric values are skipped during comparison.
+The [overall call](src/lib/status.js) is Refer if any included test is Refer or at least two tests are Monitor; one Monitor yields Monitor. Otherwise it is Normal. A check without a baseline is stored as `no-baseline`: it can't be compared, so it doesn't count toward the overall call, and the tester is told to sit the athlete out if they took a hard hit or have symptoms. There is no team-average fallback. Missing or non-finite metric values are skipped during comparison.
 
 **This is a screening tool, not a diagnosis. The cutoffs are not clinically validated yet.** A normal result cannot rule out concussion or clear an athlete to return to play. Anyone with a suspected concussion should be removed from play and evaluated by a clinician regardless of the app's call. A clinical validation study is the next step.
 
 ### How often a healthy athlete gets flagged
 
-With only a few baseline trials the sample SD is a rough estimate, so "2 spreads worse than baseline" fires on healthy athletes more often than 2 SD suggests. Simulated with the app's own spread rule (`node scripts/falsepositives.mjs`), eight scored metrics, and a healthy athlete:
+With only a few baseline trials the sample SD is a rough estimate, so a fixed cutoff fires on healthy athletes more often than the normal-distribution math suggests. Simulated with the app's own spread rule (`node scripts/falsepositives.mjs`), eight scored metrics, a healthy athlete, and the current **3-spread** cutoff:
 
 | Metric's real trial-to-trial variation | 3 baseline trials: any flag / "refer" | 5 trials: any flag / "refer" |
 |---|---|---|
-| 5% of its mean | 0.4% / 0% | 0.2% / 0% |
-| 10% | 26% / 3% | 21% / 2% |
-| 20% | 54% / 17% | 42% / 9% |
-| 30% | 59% / 20% | 44% / 10% |
+| 5% of its mean | 0% / 0% | 0% / 0% |
+| 10% | 4% / 0.1% | 2% / 0% |
+| 20% | 28% / 4% | 16% / 1% |
+| 30% | 35% / 6% | 18% / 2% |
 
-The 10%-of-mean floor on the spread handles steady metrics; for noisy ones (sway, balance errors, saccade rate, reaction spread are likely in the 20–30% band) the false "refer" rate with three baselines is around one in six. Two levers, both deliberate decisions about sensitivity versus false alarms rather than code fixes: record five baseline trials instead of three (roughly halves it), or scale the spread by a small-sample factor in `spreadFor` (a *t*-based prediction interval; makes three-trial baselines much less sensitive). Measure the real rate with healthy retests before choosing.
+At the old 2-spread cutoff the false "refer" rate was about 3%, 17% and 20% for the last three rows. A whole-call simulation (three tests, one test truly 3 SD worse for the "concussed" case) gave: healthy athletes told "remove from play" 0.1-5.5% of the time (was 5-24%), and a real drop still reaching at least "monitor" 79-94% of the time. Recording five baseline trials instead of three roughly halves the remaining false alarms. These cutoffs are a sensitivity choice, not a clinical validation; measure real healthy retests before relying on them.
 
 ## Testing protocol (and why)
 
@@ -155,6 +155,8 @@ teams/{id}
                    heat: bool, pain: bool }
   history/{uid}                  # athlete + coach only; not on the roster
     concussions: 0-20, adhd, vision, vestibular: bool, updatedAt
+  avatars/{uid}                  # profile picture; team + coach can see, owner sets
+    kind: photo | dot, photo?: JPEG data URL (192x192, <=120 KB), dot?: preset, updatedAt
   ranges/{subjectUid}_{test}
     subjectUid, test, n
     limits: { metric: { worse: higher | lower, limit: number } }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createProfile, createTeam, joinTeam, logOut } from '../lib/session.js';
+import { describeError, createProfile, createTeam, joinTeam, logOut } from '../lib/session.js';
 import { pendingInvite, clearInvite } from '../lib/invite.js';
 import { Brand } from '../brand.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
@@ -37,7 +37,7 @@ export function ProfileSetup({ email }) {
     try {
       await createProfile(role, name);
     } catch (err) {
-      setError(err.message);
+      setError(describeError(err));
       setBusy(false);
     }
   }
@@ -103,7 +103,7 @@ export function TeamSetup({ role, email, notice }) {
           ? coach
             ? 'Couldn’t create the team. Try again.'
             : 'That code didn’t work. Check it with your coach.'
-          : err.message,
+          : describeError(err),
       );
       setBusy(false);
     }

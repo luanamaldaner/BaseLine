@@ -40,7 +40,7 @@ export default function RunTest({ teams, people, selfUid, isCoach, pick, setPick
           <div className="people" data-tour="people">
           {people.filter((p) => p.teamIds.includes(team.id)).map((p) => (
             <button key={p.uid} className="person" onClick={() => setPick({ subjectUid: p.uid, testId: null })}>
-              <Avatar name={p.name} />
+              <Avatar name={p.name} uid={p.uid} />
               <span className="person-text">
                 <b>{p.uid === selfUid ? 'Me' : p.name}</b>
                 {p.uid === selfUid && <span className="muted small">{p.name}</span>}
@@ -109,7 +109,7 @@ export default function RunTest({ teams, people, selfUid, isCoach, pick, setPick
           <BackIcon size={16} /> Change person
         </button>
         <div className="run-start">
-          <Avatar name={subject.name} />
+          <Avatar name={subject.name} uid={subject.uid} />
           <h2>{isSelf ? 'Test yourself' : `Test ${subject.name}`}</h2>
         </div>
         <div className="test-pick">

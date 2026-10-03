@@ -40,7 +40,7 @@ export default function Overview({ subjectUid, isSelf, onOpenTest }) {
   return (
     <section className="overview">
       <div className="player-card" data-tour="dash-header">
-        <Avatar name={name || '?'} />
+        <Avatar name={name || '?'} uid={subjectUid} />
         <div className="player-main">
           <p className="eyebrow">{isSelf ? 'My dashboard' : 'Player dashboard'}</p>
           <h1>{name}</h1>

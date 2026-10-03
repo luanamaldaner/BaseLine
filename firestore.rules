@@ -50,6 +50,7 @@ rules_version = '2';
 //   create one for any athlete on the team, but can never read it back.
 //   Readable only by the athlete it belongs to and the team's coach.
 //
+// Collection: teams/{teamId}/avatars/{uid}   (profile picture: photo or Dot preset)
 // Collection: teams/{teamId}/history/{uid}   (pre-existing conditions)
 //   - concussions: int 0-20 - prior diagnosed concussions
 //   - adhd, vision, vestibular: bool
@@ -115,6 +116,16 @@ service cloud.firestore {
     }
 
     // Pre-existing conditions (see the data model above).
+    // A small square photo (JPEG data URL, about 10-40 KB) or a Dot preset.
+    function isValidAvatar(d) {
+      return d.keys().hasAll(['kind', 'updatedAt']) &&
+        d.keys().hasOnly(['kind', 'photo', 'dot', 'updatedAt']) &&
+        isValidDateString(d.updatedAt) &&
+        ((d.kind == 'photo' && d.photo is string && d.photo.size() <= 120000 &&
+          d.photo.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+')) ||
+         (d.kind == 'dot' && d.dot in ['sunny', 'mint', 'sky', 'berry', 'grape', 'tangerine']));
+    }
+
     function isValidHistory(d) {
       return hasExactFields(d, ['concussions', 'adhd', 'vision', 'vestibular', 'updatedAt']) &&
         d.concussions is int && d.concussions >= 0 && d.concussions <= 20 &&
@@ -362,6 +373,15 @@ service cloud.firestore {
             teamDoc(teamId).coachUid in getAfter(/databases/$(database)/documents/users/$(memberUid)).data.coachUids);
         allow update: if false;
         // Leave the team yourself, or be removed by the coach.
+        allow delete: if isOwner(memberUid) || isCoach(teamId);
+      }
+
+      match /avatars/{memberUid} {
+        // Profile pictures: everyone on the team (and the coach) can see them;
+        // only the owner can set or change theirs.
+        allow read: if isMember(teamId) || isCoach(teamId);
+        allow create, update: if isOwner(memberUid) && (isMember(teamId) || isCoach(teamId)) &&
+          isValidAvatar(request.resource.data);
         allow delete: if isOwner(memberUid) || isCoach(teamId);
       }
 

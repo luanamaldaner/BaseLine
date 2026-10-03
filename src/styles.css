@@ -1369,3 +1369,60 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
   .page-slide { animation: none; }
 }
 .touring .page-slide { animation: none; }
+
+/* Hand-made icons: free-standing lines readable in both themes */
+:root { --icon-line: #4a2f17; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --icon-line: #f3e3cf; } }
+:root[data-theme='dark'] { --icon-line: #f3e3cf; }
+
+/* ---------- Profile pictures ---------- */
+.avatar-photo { object-fit: cover; padding: 0; background: var(--surface-2); }
+.avatar-dot { background: transparent; padding: 0; overflow: visible; }
+.avatar-dot .dot-emoji { width: 100%; height: 100%; }
+button.avatar-btn { padding: 0; min-height: 0; border-radius: 50%; border: none; box-shadow: none; display: inline-grid; }
+button.avatar-btn:hover:not(:disabled) { filter: brightness(1.05); background: none; }
+button.avatar-btn .avatar { width: 34px; height: 34px; }
+.profile-modal { width: min(560px, 100%); }
+.pfp-current { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.pfp-actions { display: grid; gap: 0.5rem; justify-items: start; }
+.pfp-sub { margin: 0.25rem 0 0; font-size: calc(1rem * var(--text-scale)); }
+.pfp-dots { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 0.6rem; }
+.pfp-dot {
+  display: grid; justify-items: center; gap: 0.25rem; padding: 0.6rem 0.4rem; border-radius: 18px;
+  background: var(--surface); border: 1.5px solid var(--border); box-shadow: 0 3px 0 0 var(--border-strong);
+}
+.pfp-dot.on { border-color: var(--accent); box-shadow: 0 3px 0 0 var(--accent-depth); }
+
+/* Phone header: the profile picture gets its own cell on the second row,
+   beside the name (not stacked on Log out). */
+@media (max-width: 640px) {
+  /* specific enough to beat the rule that puts other header buttons in the Log out cell */
+  .topbar .athlete > button.avatar-btn:not(.tutorial-btn):not(.theme-toggle) { grid-area: 2 / 5; justify-self: end; }
+  .topbar .athlete > span { grid-area: 2 / 3 / 3 / 5; }
+  .topbar .athlete > .avatar-btn .avatar { width: 26px; height: 26px; }
+}
+
+/* ---------- Phone: compact tour card and tidy header buttons ---------- */
+@media (max-width: 640px) {
+  .tour-card { gap: 0.5rem; padding: 0.85rem 1rem 0.9rem; border-radius: 20px; }
+  .tour-card .tour-dot { width: 50px; height: 48px; }
+  .tour-card .tour-head { gap: 0.6rem; }
+  .tour-card .tour-head h2 { font-size: calc(1.1rem * var(--text-scale)); }
+  .tour-card .eyebrow { font-size: 0.7rem; }
+  .tour-card .tour-body { font-size: calc(0.9rem * var(--text-scale)); line-height: 1.4; }
+  .tour-card .tour-progress i { height: 4px; }
+  .tour-card .tour-actions .small-btn { min-height: 38px; padding: 0.3rem 0.9rem; }
+
+  /* Tutorial "?" as a round button the same size as the theme toggle */
+  .topbar .tutorial-btn {
+    width: 40px; height: 40px; min-height: 40px; padding: 0; justify-content: center; border-radius: 50%;
+  }
+  .topbar .tutorial-btn > span[aria-hidden] { width: 26px; height: 26px; font-size: 0.9rem; }
+  .topbar .athlete > button:not(.tutorial-btn):not(.theme-toggle):not(.avatar-btn) { white-space: nowrap; }
+}
+
+/* Dashboard test cards: equal height, button pinned to the bottom so
+   "Record baseline" and "Run a check" line up across cards */
+.test-grid { align-items: stretch; }
+.test-card { display: flex; flex-direction: column; }
+.test-card > .test-card-btn { margin-top: auto; }

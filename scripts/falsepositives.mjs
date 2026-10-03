@@ -1,5 +1,5 @@
 // How often a HEALTHY athlete gets flagged by the scoring rule in
-// shared/assess.js ("worse than 2 spreads from your own baseline", with
+// shared/assess.js ("worse than FLAG_Z spreads from your own baseline", with
 // spread = max(sample SD, 0.1 * |mean|, minSpread)), as a function of how many
 // baseline trials were recorded and how noisy the metric is.
 // Run: node scripts/falsepositives.mjs
@@ -7,12 +7,14 @@
 // The 10%-of-mean floor caps the damage when a few baseline trials happen to
 // land close together and the sample SD comes out tiny; it does nothing for
 // metrics whose real variation is larger than that.
+import { FLAG_Z } from '../shared/assess.js';
 function gauss() {
   let u = 0, v = 0;
   while (u === 0) u = Math.random();
   while (v === 0) v = Math.random();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
+
 const RUNS = 300000;
 const MIN_REL_SD = 0.1;
 console.log('true CV = the metric\'s real trial-to-trial variation as a fraction of its mean');
@@ -29,7 +31,7 @@ for (const cv of [0.05, 0.1, 0.2, 0.3]) {
       const s = Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (n - 1));
       const spread = Math.max(s, MIN_REL_SD * Math.abs(m));
       const x = mean + sd * gauss();
-      if ((x - m) / spread > 2) flags++;
+      if ((x - m) / spread > FLAG_Z) flags++;
     }
     const p = flags / RUNS;
     const none = (1 - p) ** 8, one = 8 * p * (1 - p) ** 7;

@@ -46,7 +46,12 @@ const SCORED_MIN = BASELINE_TRIALS - PRACTICE_TRIALS;
 // With only a few baseline trials the SD is unreliable (often ~0), so never
 // let it drop below this fraction of the mean.
 const MIN_REL_SD = 0.1;
-export const FLAG_Z = 2;
+// A metric counts as worse only past 3 spreads from the athlete's own
+// baseline. At 2, a healthy athlete got a false "remove from play" 5-24% of
+// the time from ordinary trial-to-trial noise (three-trial baselines); at 3
+// it is 0.1-5.5%, and a real drop still reaches at least "monitor" in most
+// cases. See scripts/falsepositives.mjs.
+export const FLAG_Z = 3;
 
 const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
 const sd = (xs) => {
@@ -140,6 +145,6 @@ export const ACTIONS = {
   },
   'no-baseline': {
     title: 'No baseline on file',
-    action: 'There is nothing to compare against. Treat it as a possible concussion: remove them from play and tell the coach.',
+    action: 'There is nothing to compare against yet. If they took a hard hit or have any symptoms, sit them out and tell the coach.',
   },
 };
