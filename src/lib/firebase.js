@@ -7,7 +7,7 @@ import {
 import {
   initializeFirestore,
   persistentLocalCache,
-  persistentSingleTabManager,
+  persistentMultipleTabManager,
 } from 'firebase/firestore';
 
 // Web app config comes from .env.local (not committed; see .env.example).
@@ -35,16 +35,15 @@ export const auth = initializeAuth(app, {
 
 // Offline cache: results keep saving on bad Wi-Fi and sync when it's back.
 //
-// Single-tab manager: with the multi-tab one, only one "primary" tab talks to
-// the network and the others hand it their writes. On a phone that primary
-// can be a frozen background Safari tab or a suspended installed app, and the
-// tab in use queues writes forever: results show locally and never sync.
+// Share the persistent outbox between tabs. An exclusive single-tab cache
+// makes a second tab fall back to memory, so its unsynced results can be lost
+// on reload. The SDK coordinates the network owner across tabs.
 //
 // Forced long polling: on some networks (campus and venue Wi-Fi, carrier
 // proxies) Firestore's streaming transport opens but writes are never
 // acknowledged, with the same symptom. The SDK's auto-detect only catches a
 // failed handshake, not a stream that hangs.
 export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   experimentalForceLongPolling: true,
 });

@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createProfile, createTeam, joinTeam, logOut } from '../lib/session.js';
 import { pendingInvite, clearInvite } from '../lib/invite.js';
 import { Brand } from '../brand.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import { serviceErrorMessage } from '../lib/serviceErrors.js';
 
 function Shell({ title, intro, children, email }) {
   return (
@@ -29,15 +30,20 @@ export function ProfileSetup({ email }) {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const busyRef = useRef(false);
 
   async function submit(e) {
     e.preventDefault();
+    if (busyRef.current || !role || !name.trim()) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
       await createProfile(role, name);
     } catch (err) {
-      setError(err.message);
+      setError(serviceErrorMessage(err));
+    } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -56,6 +62,7 @@ export function ProfileSetup({ email }) {
               className={`role-card ${role === id ? 'on' : ''}`}
               onClick={() => setRole(id)}
               aria-pressed={role === id}
+              disabled={busy}
             >
               <b>{label}</b>
               <span className="muted small">{text}</span>
@@ -68,11 +75,12 @@ export function ProfileSetup({ email }) {
           placeholder={role === 'coach' ? 'Your name (e.g. Coach Rivera)' : 'Your name'}
           aria-label="Your name"
           maxLength={60}
+          disabled={busy}
         />
         <p className="muted small">You can’t switch between coach and athlete later.</p>
-        {error && <div className="form-error">{error}</div>}
+        {error && <div className="form-error" role="alert">{error}</div>}
         <button className="primary" type="submit" disabled={!role || !name.trim() || busy}>
-          Continue
+          {busy ? 'Saving profile…' : 'Continue'}
         </button>
       </form>
     </Shell>
@@ -85,10 +93,13 @@ export function TeamSetup({ role, email, notice }) {
   const [value, setValue] = useState(invite ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const busyRef = useRef(false);
   const coach = role === 'coach';
 
   async function submit(e) {
     e.preventDefault();
+    if (busyRef.current || !value.trim()) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -98,13 +109,9 @@ export function TeamSetup({ role, email, notice }) {
         clearInvite();
       }
     } catch (err) {
-      setError(
-        err.code === 'permission-denied'
-          ? coach
-            ? 'Couldn’t create the team. Try again.'
-            : 'That code didn’t work. Check it with your coach.'
-          : err.message,
-      );
+      setError(serviceErrorMessage(err));
+    } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -124,15 +131,16 @@ export function TeamSetup({ role, email, notice }) {
       <form className="setup-form" onSubmit={submit}>
         <input
           value={value}
-          onChange={(e) => setValue(coach ? e.target.value : e.target.value.toUpperCase())}
+          onChange={(e) => setValue(coach ? e.target.value : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
           placeholder={coach ? 'Team name (e.g. UF Club Soccer)' : 'Team code'}
           aria-label={coach ? 'Team name' : 'Team code'}
-          maxLength={coach ? 60 : 7}
+          maxLength={coach ? 60 : 12}
+          disabled={busy}
           autoCapitalize={coach ? 'words' : 'characters'}
           autoComplete="off"
           className={coach ? '' : 'code-input'}
         />
-        {error && <div className="form-error">{error}</div>}
+        {error && <div className="form-error" role="alert">{error}</div>}
         <button className="primary" type="submit" disabled={!value.trim() || busy}>
           {busy ? 'One moment…' : coach ? 'Create team' : 'Join team'}
         </button>

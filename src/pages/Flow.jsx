@@ -14,6 +14,8 @@ import { useConditions } from '../lib/conditions.js';
 import { TestDemo } from '../components/Mascot.jsx';
 import { baselineConcerns } from '../lib/validity.js';
 import DotEmoji from '../components/DotEmoji.jsx';
+import ResultSaveStatus from '../components/ResultSaveStatus.jsx';
+import { serviceErrorMessage } from '../lib/serviceErrors.js';
 
 // The three objective tests, one after the other, for an athlete who may be
 // young or concussed: one instruction per screen, every instruction spoken,
@@ -278,6 +280,9 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const [concerns, setConcerns] = useState(null); // why these baselines look off, before saving
   const conditions = useConditions();
   const [saved, setSaved] = useState(null); // { kind: 'baseline' } | { kind: 'check', byTest }
+  const [progress, setProgress] = useState(null);
+  const queuedRef = useRef({ kind: null, byTest: {} });
+  const busyRef = useRef(false);
 
   const done = STEPS.filter((s) => results[s.id]?.ok);
   // The id results are stored and scored under: the eye test reports 'eye'
@@ -298,7 +303,8 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const overall = overallStatus(calls);
   const status = overall && STATUS[overall];
 
-  function saveAllBaseline(force = false) {
+  async function saveAllBaseline(force = false) {
+    if (busyRef.current || saved || !done.length || queuedRef.current.kind === 'check') return;
     if (!force) {
       const c = [
         ...(conditions?.rested === false ? ['They hadn’t rested since exercising, which drags scores down.'] : []),
@@ -309,20 +315,44 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
       if (c.length) return setConcerns(c);
     }
     setConcerns(null);
-    for (const s of done) saveBaseline(tid(s), results[s.id].metrics, conditions);
-    setSaved({ kind: 'baseline' });
-  }
-
-  async function submitAllChecks() {
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
-      const byTest = {};
-      for (const s of done) byTest[s.id] = await submitCheck(subject.uid, tid(s), results[s.id].metrics, conditions);
-      setSaved({ kind: 'check', byTest });
+      for (const s of done) {
+        if (queuedRef.current.byTest[s.id]) continue;
+        const trial = await saveBaseline(tid(s), results[s.id].metrics, conditions);
+        queuedRef.current.kind = 'baseline';
+        queuedRef.current.byTest[s.id] = trial;
+        setProgress({ kind: 'baseline', byTest: { ...queuedRef.current.byTest } });
+      }
+      setSaved({ kind: 'baseline', byTest: { ...queuedRef.current.byTest } });
     } catch (e) {
-      setError(e?.message || 'Something went wrong. Try again.');
+      setError(serviceErrorMessage(e));
     } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function submitAllChecks() {
+    if (busyRef.current || saved || !done.length || queuedRef.current.kind === 'baseline') return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      for (const s of done) {
+        if (queuedRef.current.byTest[s.id]) continue;
+        const result = await submitCheck(subject.uid, tid(s), results[s.id].metrics, conditions);
+        queuedRef.current.kind = 'check';
+        queuedRef.current.byTest[s.id] = result;
+        setProgress({ kind: 'check', byTest: { ...queuedRef.current.byTest } });
+      }
+      setSaved({ kind: 'check', byTest: { ...queuedRef.current.byTest } });
+    } catch (e) {
+      setError(serviceErrorMessage(e));
+    } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -348,33 +378,35 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
         </div>
       )}
 
-      {error && <div className="callout danger">{error}</div>}
+      {error && <div className="callout danger" role="alert">
+        {error}
+        {progress && <p className="small">Retry to save the remaining results. Results already recorded will not be duplicated.</p>}
+      </div>}
       {concerns && (
         <div className="callout warn concerns" role="alert">
           <b>This doesn’t look like a typical healthy baseline.</b>
           <ul>{concerns.map((c) => <li key={c}>{c}</li>)}</ul>
           <span className="small">Baselines should be the athlete’s best effort: a poor one makes later checks look fine.</span>
           <div className="row">
-            <button className="primary" onClick={onDone}>Don’t save, start again</button>
-            <button className="ghost" onClick={() => saveAllBaseline(true)}>Save anyway</button>
+            <button className="primary" onClick={onDone} disabled={busy}>Don’t save, start again</button>
+            <button className="ghost" onClick={() => saveAllBaseline(true)} disabled={busy}>Save anyway</button>
           </div>
         </div>
       )}
 
-      {saved ? (
-        <p className="saved">
-          Saved {done.length} result{done.length === 1 ? '' : 's'} as{' '}
-          {saved.kind === 'baseline' ? 'baseline trials' : 'post-hit checks'}.
-        </p>
-      ) : (
+      {progress && <ResultSaveStatus
+        ids={Object.values(progress.byTest).map((result) => progress.kind === 'baseline' ? result.id : result.trialId)}
+        label={`${Object.keys(progress.byTest).length} ${progress.kind === 'baseline' ? 'baseline trial' : 'post-hit check'}${Object.keys(progress.byTest).length === 1 ? '' : 's'}`}
+      />}
+      {!saved && (
         <div className="row">
           {isSelf && (
-            <button className="primary big-btn" onClick={() => saveAllBaseline()} disabled={busy}>
-              Save all as baseline
+            <button className="primary big-btn" onClick={() => saveAllBaseline()} disabled={busy || !done.length || progress?.kind === 'check'}>
+              {progress?.kind === 'baseline' ? 'Retry remaining baselines' : 'Save all as baseline'}
             </button>
           )}
-          <button className={`big-btn ${isSelf ? '' : 'primary'}`} onClick={submitAllChecks} disabled={busy}>
-            {busy ? 'Checking…' : isSelf ? 'Save all as post-hit check' : 'Submit all as post-hit checks'}
+          <button className={`big-btn ${isSelf ? '' : 'primary'}`} onClick={submitAllChecks} disabled={busy || !done.length || progress?.kind === 'baseline'}>
+            {busy ? 'Recording…' : progress?.kind === 'check' ? 'Retry remaining checks' : isSelf ? 'Save all as post-hit check' : 'Submit all as post-hit checks'}
           </button>
         </div>
       )}

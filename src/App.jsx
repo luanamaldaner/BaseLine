@@ -1,7 +1,8 @@
 import { useState, useLayoutEffect, useRef } from 'react';
 import { useScreenTop } from './lib/focus.js';
 import { HomeIcon, HistoryIcon, BookIcon, SymptomsIcon, UsersIcon } from './components/Icons.jsx';
-import { useSession, logOut, teamIdsOf } from './lib/session.js';
+import { useSession, logOut, teamIdsOf, retrySync, retryTrial } from './lib/session.js';
+import { serviceErrorMessage } from './lib/serviceErrors.js';
 import AuthScreen from './pages/AuthScreen.jsx';
 import { ProfileSetup, TeamSetup } from './pages/Setup.jsx';
 import Overview, { Guide } from './pages/Overview.jsx';
@@ -43,12 +44,12 @@ export default function App() {
 
   if (!s.authChecked) return <Splash text="Loading…" />;
   if (!s.user) return <AuthScreen />;
-  if (s.profile === undefined) return <Splash text={s.error ?? 'Loading your account…'} />;
-  if (s.profileConfirmed === false) return <Splash text={s.error ?? 'Loading your account…'} />;
+  if (s.profile === undefined) return <Splash text={s.error ?? 'Loading your account…'} retry={!!s.error} />;
+  if (s.profileConfirmed === false) return <Splash text={s.error ?? 'Loading your account…'} retry={!!s.error} />;
   if (!s.profile) return <ProfileSetup email={email} />;
   if (!s.profile.consentedAt) return <ConsentScreen email={email} />;
   if (!teamIdsOf(s.profile).length) return <TeamSetup role={s.profile.role} email={email} />;
-  if (s.teams.size < teamIdsOf(s.profile).length || !s.trialsReady) return <Splash text={s.error ?? 'Loading your teams…'} />;
+  if (s.teams.size < teamIdsOf(s.profile).length || !s.trialsReady) return <Splash text={s.error ?? 'Loading your teams…'} retry={!!s.error} />;
   return s.profile.role === 'coach' ? <CoachApp s={s} /> : <AthleteApp s={s} />;
 }
 
@@ -57,22 +58,64 @@ export default function App() {
 function SyncStatus({ s }) {
   const n = s.pendingWrites ?? 0;
   const down = s.server && !s.server.ok;
-  if (!n && !down) return null;
+  const failedIds = [...(s.trialWrites?.entries() ?? [])].filter(([, entry]) => entry.status === 'failed').map(([id]) => id);
+  const failed = failedIds.length;
+  if (!n && !down && !s.syncError && !failed) return null;
   const results = `${n} result${n === 1 ? '' : 's'}`;
   return (
-    <p className={`sync-status ${down ? 'bad' : 'warn'}`} role="status">
-      {down
-        ? `Can’t reach the server. ${n ? `${results} saved on this device; they’ll sync when the connection works.` : ''} Try switching between Wi-Fi and cellular.`
-        : `Syncing ${results}…`}
-    </p>
+    <div className={`sync-status ${down || s.syncError || failed ? 'bad' : 'warn'}`} role="status">
+      {s.syncError && <p>{serviceErrorMessage(s.syncError)}</p>}
+      {n > 0 && <p>{results} waiting for Firebase confirmation. Keep this device’s browser data so queued results can upload when service resumes.</p>}
+      {failed > 0 && <>
+        <p>{failed} result{failed === 1 ? '' : 's'} could not upload. Keep this page open until you retry successfully.</p>
+        <RetryFailedResults ids={failedIds} />
+      </>}
+      {down && !s.syncError && <p>Cloud sync is unavailable. Check your connection, then retry.</p>}
+      <RetryConnection />
+    </div>
   );
 }
 
-function Splash({ text }) {
+function RetryFailedResults({ ids }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function retry() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try { await Promise.all(ids.map((id) => retryTrial(id))); }
+    catch (e) { setError(serviceErrorMessage(e)); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <button className="small-btn" onClick={retry} disabled={busy}>{busy ? 'Retrying results…' : 'Retry failed results'}</button>
+    {error && <p role="alert">{error}</p>}
+  </>;
+}
+
+function RetryConnection() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function retry() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try { await retrySync(); }
+    catch (e) { setError(serviceErrorMessage(e)); }
+    finally { setBusy(false); }
+  }
+  return <>
+    <button className="ghost small-btn" onClick={retry} disabled={busy}>{busy ? 'Checking connection…' : 'Retry connection'}</button>
+    {error && <p role="alert">{error}</p>}
+  </>;
+}
+
+function Splash({ text, retry = false }) {
   return (
     <div className="gate">
       <ThemeToggle fab />
-      <p className="muted">{text}</p>
+      <p className="muted" role="status">{text}</p>
+      {retry && <RetryConnection />}
     </div>
   );
 }
@@ -96,6 +139,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
   // Tab transitions: a pill that slides to the active tab, and the page
   // sliding in from the side of the tab you came from.
   const tabRefs = useRef({});
+  const navRef = useRef(null);
   const [pill, setPill] = useState(null);
   const order = tabs.map(([id]) => id);
   const prevTab = useRef(tab);
@@ -107,12 +151,26 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
   useLayoutEffect(() => {
     if (focus) return undefined;
     const place = () => {
+      if (window.matchMedia('(max-width: 640px)').matches) {
+        setPill(null);
+        return;
+      }
       const el = tabRefs.current[tab];
-      if (el) setPill({ left: el.offsetLeft, width: el.offsetWidth, top: el.offsetTop, height: el.offsetHeight });
+      if (el) {
+        const next = { left: el.offsetLeft, width: el.offsetWidth, top: el.offsetTop, height: el.offsetHeight };
+        setPill((current) => current && Object.keys(next).every((key) => current[key] === next[key]) ? current : next);
+      }
     };
     place();
+    // Fonts and alert counts can resize a tab without resizing the window.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place);
+    if (navRef.current) observer?.observe(navRef.current);
+    Object.values(tabRefs.current).forEach((el) => { if (el) observer?.observe(el); });
     window.addEventListener('resize', place);
-    return () => window.removeEventListener('resize', place);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', place);
+    };
   }, [tab, focus, tabs.length]);
   return (
     <div className={`app${focus ? ' focus' : ''}`}>
@@ -120,21 +178,23 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
         <>
           <header className="topbar">
             <div className="brand">
-              <Logo /> <span>{APP_NAME}</span>
-              <span className="team-name">{s.teams.size === 1 ? [...s.teams.values()][0].name : `${s.teams.size} teams`}</span>
+              <Logo /> <span className="brand-name">{APP_NAME}</span>
             </div>
-            <div className="athlete">
-              <span>
-                <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
-              </span>
-              <button className="ghost small-btn tutorial-btn" data-tour="tutorial" aria-label="Tutorial" onClick={() => setTouring(true)}>
-                <span aria-hidden>?</span> <span className="tutorial-label">Tutorial</span>
+            <span className="team-name" title={s.teams.size === 1 ? [...s.teams.values()][0].name : `${s.teams.size} teams`}>
+              {s.teams.size === 1 ? [...s.teams.values()][0].name : `${s.teams.size} teams`}
+            </span>
+            <div className="account-name" title={`${s.profile.name} (${s.profile.role})`}>
+              <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
+            </div>
+            <div className="header-actions">
+              <button className="ghost small-btn tutorial-btn" data-tour="tutorial" aria-label="Open tutorial" title="Open tutorial" onClick={() => setTouring(true)}>
+                <span className="tutorial-icon" aria-hidden>?</span><span className="tutorial-label">Tutorial</span>
               </button>
               <ThemeToggle />
-              <button className="ghost small-btn" onClick={logOut}>Log out</button>
+              <button className="ghost small-btn logout-btn" onClick={logOut}>Log out</button>
             </div>
           </header>
-          <nav className="tabs">
+          <nav className="tabs" ref={navRef} aria-label="Main navigation">
             {pill && <span className="tab-pill" aria-hidden="true" style={pill} />}
             {tabs.map(([id, label, shortLabel, Icon]) => (
               <button key={id} ref={(el) => { tabRefs.current[id] = el; }} className={id === tab ? 'active' : ''} aria-current={id === tab ? 'page' : undefined} onClick={() => setTab(id)}>

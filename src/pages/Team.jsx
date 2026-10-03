@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { TESTS, RESULT_TESTS } from '../tests/registry.js';
 import { exportCsv } from '../lib/baseline.js';
 import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } from '../lib/status.js';
@@ -10,6 +10,7 @@ import { inviteUrl, pendingInvite, clearInvite } from '../lib/invite.js';
 import { AlertsPanel } from '../components/Alerts.jsx';
 import { HistoryForm } from '../components/MedicalHistory.jsx';
 import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
+import { serviceErrorMessage } from '../lib/serviceErrors.js';
 
 const RANK = { refer: 0, monitor: 1, normal: 2, none: 3 };
 
@@ -134,32 +135,50 @@ function Ring({ done, total }) {
 // Coach: join code + manage athletes.
 function CoachTeamCard({ team, members, names }) {
   const [copied, setCopied] = useState(null); // 'code' | 'link'
+  const [removing, setRemoving] = useState(null);
+  const [error, setError] = useState(null);
+  const removingRef = useRef(false);
   const link = inviteUrl(team.code);
-  const copy = (what, text) => {
-    navigator.clipboard?.writeText(text).then(() => {
+  const copy = async (what, text) => {
+    setError(null);
+    try {
+      if (!navigator.clipboard) throw new Error('Copy isn’t available in this browser. Use the team code shown above.');
+      await navigator.clipboard.writeText(text);
       setCopied(what);
       setTimeout(() => setCopied(null), 1500);
-    });
+    } catch (e) {
+      setError(serviceErrorMessage(e, 'Couldn’t copy. Use the team code shown above.'));
+    }
   };
   const share = async () => {
     const text = `Join ${team.name} on Baseline: ${link}`;
     if (navigator.share) {
       try {
         await navigator.share({ title: `Join ${team.name}`, text, url: link });
-      } catch {
-        /* cancelled */
+      } catch (e) {
+        if (e.name !== 'AbortError') await copy('link', link);
       }
     } else copy('link', link);
   };
-  const remove = (m) => {
-    if (confirm(`Remove ${m.name} from ${team.name}? Their results stay saved.`)) {
-      removeMember(team.id, m.uid).catch((e) => alert(`Couldn't remove: ${e.message}`));
+  const remove = async (m) => {
+    if (removingRef.current || !confirm(`Remove ${m.name} from ${team.name}? Their results stay saved.`)) return;
+    removingRef.current = true;
+    setRemoving(m.uid);
+    setError(null);
+    try {
+      await removeMember(team.id, m.uid);
+    } catch (e) {
+      setError(serviceErrorMessage(e, 'Couldn’t remove this athlete. Try again.'));
+    } finally {
+      removingRef.current = false;
+      setRemoving(null);
     }
   };
 
   return (
     <section className="team-page">
       <h2>{team.name}</h2>
+      {error && <div className="form-error" role="alert">{error}</div>}
       <div className="code-card invite-card" data-tour="team-code">
         <div className="invite-qr">
           <QrCode text={link} label={`QR code to join ${team.name}`} />
@@ -198,7 +217,9 @@ function CoachTeamCard({ team, members, names }) {
               <b>{m.name}</b>
               <div className="muted small">Joined {formatWhen(m.joinedAt)}</div>
             </div>
-            <button className="ghost small-btn danger-text" onClick={() => remove(m)}>Remove</button>
+            <button className="ghost small-btn danger-text" disabled={!!removing} onClick={() => remove(m)}>
+              {removing === m.uid ? 'Removing…' : 'Remove'}
+            </button>
           </div>
         ))}
       </div>
@@ -208,9 +229,21 @@ function CoachTeamCard({ team, members, names }) {
 
 // Athlete: their team + leave.
 function AthleteTeamCard({ team, members }) {
-  const leave = () => {
-    if (confirm(`Leave ${team.name}? Your results stay in your record.`)) {
-      leaveTeam(team.id).catch((e) => alert(`Couldn't leave: ${e.message}`));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const busyRef = useRef(false);
+  const leave = async () => {
+    if (busyRef.current || !confirm(`Leave ${team.name}? Your results stay in your record.`)) return;
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      await leaveTeam(team.id);
+    } catch (e) {
+      setError(serviceErrorMessage(e, 'Couldn’t leave this team. Try again.'));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
     }
   };
   return (
@@ -225,7 +258,8 @@ function AthleteTeamCard({ team, members }) {
         You can run post-hit checks on any teammate. You only ever see your own numbers; your
         coach sees everyone’s.
       </p>
-      <button className="danger-btn" onClick={leave}>Leave team</button>
+      {error && <div className="form-error" role="alert">{error}</div>}
+      <button className="danger-btn" onClick={leave} disabled={busy}>{busy ? 'Leaving…' : 'Leave team'}</button>
     </section>
   );
 }
@@ -251,21 +285,26 @@ function TeamForm({ coach = false }) {
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const busyRef = useRef(false);
   async function submit(e) {
-    e.preventDefault(); setBusy(true); setError(null);
+    e.preventDefault();
+    if (busyRef.current || !value.trim()) return;
+    busyRef.current = true;
+    setBusy(true); setError(null);
     try {
       if (coach) await createTeam(value);
       else await joinTeam(value);
       setValue('');
-    } catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+    } catch (e) { setError(serviceErrorMessage(e)); }
+    finally { busyRef.current = false; setBusy(false); }
   }
   return <section className="panel">
     <h2>{coach ? 'Create another team' : 'Join another team'}</h2>
     <form className="setup-form" onSubmit={submit}>
       <input aria-label={coach ? 'Team name' : 'Team code'} placeholder={coach ? 'Team name' : 'Team code'}
-        maxLength={coach ? 60 : 6} value={value} onChange={(e) => setValue(coach ? e.target.value : e.target.value.toUpperCase())} />
-      {error && <div className="form-error">{error}</div>}
+        maxLength={coach ? 60 : 12} disabled={busy} autoComplete="off" autoCapitalize={coach ? 'words' : 'characters'}
+        value={value} onChange={(e) => setValue(coach ? e.target.value : e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))} />
+      {error && <div className="form-error" role="alert">{error}</div>}
       <button className="primary" disabled={busy || !value.trim()}>{busy ? 'One moment…' : coach ? 'Create team' : 'Join team'}</button>
     </form>
   </section>;
@@ -277,29 +316,42 @@ export function InviteOffer() {
   const [team, setTeam] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const busyRef = useRef(false);
+  const alreadyJoined = !!team && teamIdsOf(s.profile).includes(team.id);
   const dismiss = () => { clearInvite(); setCode(null); };
   useEffect(() => {
     if (!code) return;
     let active = true;
+    setLoading(true);
+    setError(null);
     lookupTeam(code).then((t) => {
       if (!active) return;
-      if (teamIdsOf(s.profile).includes(t.id)) dismiss();
-      else setTeam(t);
-    }).catch((e) => { if (active) setError(e.message); });
+      setTeam(t);
+    }).catch((e) => { if (active) setError(serviceErrorMessage(e)); })
+      .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [code, s.profile]);
+  }, [code, attempt]);
+  useEffect(() => {
+    if (alreadyJoined) { clearInvite(); setCode(null); }
+  }, [alreadyJoined]);
   if (!code) return null;
   async function join() {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true); setError(null);
     try { await joinTeam(code); dismiss(); }
-    catch (e) { setError(e.message); }
-    finally { setBusy(false); }
+    catch (e) { setError(serviceErrorMessage(e)); }
+    finally { busyRef.current = false; setBusy(false); }
   }
   return <section className="callout">
     <h2>{team ? 'Join ' + team.name + '?' : 'Team invite'}</h2>
-    {error && <p className="form-error">{error}</p>}
+    {loading && <p className="muted small" role="status">Looking up your team…</p>}
+    {error && <p className="form-error" role="alert">{error}</p>}
     <div className="row">
-      <button className="primary" disabled={!team || busy} onClick={join}>{busy ? 'Joining…' : 'Join team'}</button>
+      {!team && error && <button className="primary" disabled={loading} onClick={() => setAttempt((n) => n + 1)}>Retry team lookup</button>}
+      <button className="primary" disabled={!team || busy || loading} onClick={join}>{busy ? 'Joining…' : 'Join team'}</button>
       <button className="ghost" disabled={busy} onClick={dismiss}>Dismiss</button>
     </div>
   </section>;

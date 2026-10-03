@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "postinstall": "node scripts/copy-wasm.mjs",
-    "test": "node scripts/selftest.mjs"
+    "test": "node scripts/selftest.mjs && node --test scripts/session.test.mjs scripts/serviceErrors.test.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",

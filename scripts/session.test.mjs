@@ -3,6 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as assess from '../shared/assess.js';
+import { serviceErrorMessage } from '../src/lib/serviceErrors.js';
 
 // Exercise session transitions without connecting to the live project.
 const source = readFileSync(new URL('../src/lib/session.js', import.meta.url), 'utf8')
@@ -10,10 +11,12 @@ const source = readFileSync(new URL('../src/lib/session.js', import.meta.url), '
   .replaceAll('import.meta.env.DEV', 'false')
   .replace(/\bexport /g, '');
 
-function setup(initial = {}, role = 'athlete') {
+function setup(initial = {}, role = 'athlete', options = {}) {
   const data = new Map(Object.entries(initial));
   const streams = new Map();
   const writes = [];
+  const reads = [];
+  const timers = [];
   const auth = { currentUser: { uid: 'me' } };
   let serial = 0;
   const ref = (...parts) => {
@@ -45,49 +48,85 @@ function setup(initial = {}, role = 'athlete') {
     };
   };
   const context = vm.createContext({
-    ...assess, auth, db: {}, console, crypto: globalThis.crypto, setTimeout, clearTimeout,
+    ...assess, serviceErrorMessage, auth, db: {}, console, crypto: globalThis.crypto,
+    setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); timers.push({ fn, ms }); return timer; }, clearTimeout,
     useSyncExternalStore: () => {}, onAuthStateChanged: () => {}, signOut: () => {},
     collection: ref,
     doc: (...parts) => parts.length === 1 ? ref(parts[0], 'new' + ++serial) : ref(...parts),
     query: (r, filter) => ({ ...r, filter }), where: (field, op, value) => ({ field, value }),
-    getDocFromServer: async (r) => snapshot(r),
+    getDocFromServer: async (r) => { reads.push(r.path); if (options.readError) throw options.readError; return snapshot(r); },
     getDocsFromServer: async (r) => ({ docs: [...data.keys()]
       .filter((path) => path.startsWith(r.path + '/') && path.split('/').length === r.path.split('/').length + 1)
       .filter((path) => !r.filter || data.get(path)[r.filter.field] === r.filter.value)
       .map((path) => snapshot(ref(path))) }),
     onSnapshot: (r, ...args) => {
       const next = typeof args[0] === 'function' ? args[0] : args[1];
-      const entry = { r, next, active: true };
+      const error = typeof args[0] === 'function' ? args[1] : args[2];
+      const entry = { r, next, error, active: true };
       if (!streams.has(r.path)) streams.set(r.path, []);
       streams.get(r.path).push(entry);
       return () => { entry.active = false; };
     },
     runTransaction: async (_, fn) => { const batch = tx(); const result = await fn(batch); await batch.commit(); return result; },
     writeBatch: tx,
-    setDoc: async (r, value) => { writes.push({ op: 'set', path: r.path, value }); data.set(r.path, value); },
+    setDoc: async (r, value) => {
+      writes.push({ op: 'set', path: r.path, value });
+      if (options.setDoc) await options.setDoc(r, value);
+      data.set(r.path, value);
+    },
     updateDoc: async (r, value) => data.set(r.path, { ...data.get(r.path), ...value }),
     deleteDoc: async (r) => { writes.push({ op: 'delete', path: r.path }); data.delete(r.path); },
   });
-  vm.runInContext(source + '\nglobalThis.api = { set, getSession, startTeams, stopTeam, migrateProfile, createProfile, createTeam, joinTeam, leaveTeam, saveHistory, saveBaseline, submitCheck, deleteTrial, watchProfile };', context);
+  vm.runInContext(source + '\nglobalThis.api = { set, getSession, startTeams, stopTeam, migrateProfile, createProfile, createTeam, joinTeam, leaveTeam, saveHistory, saveBaseline, submitCheck, deleteTrial, watchProfile, syncRanges, retryTrial, retrySync };', context);
   const api = context.api;
   api.set({ user: auth.currentUser, profile: data.get('users/me') ?? { role, name: 'Me', teamIds: ['t1'], teamId: 't1' } });
   const emit = (path, items, metadata = {}) => {
     for (const entry of streams.get(path) ?? []) {
       if (!entry.active) continue;
       const snap = items === null ? snapshot(ref(path), metadata) : {
-        docs: items.map(([id, value]) => ({ id, ref: ref(path, id), data: () => value })),
+        docs: items.map(([id, value, meta = {}]) => ({ id, ref: ref(path, id), data: () => value, metadata: { hasPendingWrites: false, ...meta } })),
         metadata: { fromCache: false, hasPendingWrites: false, ...metadata },
       };
       entry.next(snap);
     }
   };
-  return { api, data, streams, writes, emit };
+  const fail = (path, error) => { for (const entry of streams.get(path) ?? []) if (entry.active) entry.error(error); };
+  return { api, data, streams, writes, reads, timers, emit, fail, auth };
 }
 
 const baseline = { subjectUid: 'me', testerUid: 'me', test: 'reaction', kind: 'baseline', at: '2026-10-01T12:00:00.000Z', metrics: { medianMs: 250, spreadMs: 30, mistakes: 0 } };
 const team = (coachUid = 'coach') => ({ coachUid, name: 'Team', coachName: 'Coach', code: 'ABCDEF' });
 const member = { name: 'Me', joinedAt: '2026-10-01T12:00:00.000Z', code: 'ABCDEF' };
 const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test('Firestore sorted map keys do not rewrite identical cutoffs', async () => {
+  const { api, emit, writes } = setup();
+  const lim = assess.limitsFrom(assess.summarize([baseline]), assess.SPECS.reaction);
+  const sorted = Object.fromEntries(Object.entries(lim.limits).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => [key, { limit: value.limit, worse: value.worse }]));
+  api.startTeams(['t1'], 'me', 'athlete');
+  emit('teams/t1/members', [['me', member]]);
+  emit('users/me/trials', [['b', baseline]]);
+  emit('teams/t1/trials', []);
+  for (let i = 0; i < 20; i++) emit('teams/t1/ranges', [['me_reaction', { subjectUid: 'me', test: 'reaction', n: lim.n, limits: sorted }]]);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(writes.length, 0);
+  api.stopTeam();
+});
+
+test('pending results survive reload status and a rejected restored result can be retried', async () => {
+  const { api, emit, data } = setup();
+  api.startTeams(['t1'], 'me', 'athlete');
+  emit('users/me/trials', [['queued', baseline, { hasPendingWrites: true }]], { fromCache: true, hasPendingWrites: true });
+  assert.equal(api.getSession().pendingWrites, 1);
+  emit('users/me/trials', []);
+  assert.equal(api.getSession().pendingWrites, 0);
+  assert.equal(api.getSession().trialWrites.get('queued').status, 'failed');
+  await api.retryTrial('queued');
+  assert.equal(api.getSession().trialWrites.get('queued').status, 'saved');
+  assert.deepEqual(plain(data.get('users/me/trials/queued')), baseline);
+  api.stopTeam();
+});
 
 test('migration preserves ids, external tester, conditions and phone eye results; safe twice', async () => {
   const check = { ...baseline, kind: 'check', test: 'eyePhone', testerUid: 'teammate', status: 'monitor',

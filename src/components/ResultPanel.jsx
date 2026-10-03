@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { compare, summarizeBaseline, BASELINE_TRIALS } from '../lib/baseline.js';
 import { saveBaseline, submitCheck } from '../lib/session.js';
 import { ACTIONS } from '../../shared/assess.js';
@@ -6,6 +6,8 @@ import ResultCards from './ResultCards.jsx';
 import { useConditions } from '../lib/conditions.js';
 import { baselineConcerns } from '../lib/validity.js';
 import DotEmoji from './DotEmoji.jsx';
+import ResultSaveStatus from './ResultSaveStatus.jsx';
+import { serviceErrorMessage } from '../lib/serviceErrors.js';
 
 // "Baseline: 2 of 3 trials recorded" (only for people allowed to see it).
 export function BaselineProgress({ subjectUid, test }) {
@@ -43,23 +45,28 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
   const [saved, setSaved] = useState(null); // { kind: 'baseline' } | { kind: 'check', result }
   const [concerns, setConcerns] = useState(null); // why this baseline looks off, before saving
   const conditions = useConditions();
+  const busyRef = useRef(false);
 
   const preview = canSeeData && summarizeBaseline(subject.uid, test) ? compare(subject.uid, test, metrics) : null;
 
   async function check() {
+    if (busyRef.current || saved) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
       const result = await submitCheck(subject.uid, test, metrics, conditions);
       setSaved({ kind: 'check', result });
     } catch (e) {
-      setError(e?.message || 'Something went wrong. Try again.');
+      setError(serviceErrorMessage(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
 
-  function baseline(force = false) {
+  async function baseline(force = false) {
+    if (busyRef.current || saved) return;
     if (!force) {
       const c = [
         ...(conditions?.rested === false ? ['They hadn’t rested since exercising, which drags scores down.'] : []),
@@ -70,8 +77,18 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
       if (c.length) return setConcerns(c);
     }
     setConcerns(null);
-    saveBaseline(test, metrics, conditions);
-    setSaved({ kind: 'baseline' });
+    busyRef.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const trial = await saveBaseline(test, metrics, conditions);
+      setSaved({ kind: 'baseline', trialId: trial.id });
+    } catch (e) {
+      setError(serviceErrorMessage(e));
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   }
 
   if (saved?.kind === 'check') {
@@ -83,7 +100,8 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
           <ResultCards metrics={metrics} spec={spec} comparison={comparison} />
         )}
         {canSeeData && children}
-        <p className="saved">Saved as a post-hit check{canSeeData ? '' : '. Only they and the coach can see the numbers'}.</p>
+        <ResultSaveStatus ids={[saved.result.trialId]} label="Post-hit check" />
+        {!canSeeData && <p className="muted small">Only they and the coach can see the numbers.</p>}
       </div>
     );
   }
@@ -93,7 +111,7 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
       <div className="result-panel">
         <ResultCards metrics={metrics} spec={spec} comparison={null} />
         {children}
-        <p className="saved">Saved as a baseline trial.</p>
+        <ResultSaveStatus ids={[saved.trialId]} label="Baseline trial" />
         <BaselineProgress subjectUid={subject.uid} test={test} />
       </div>
     );
@@ -118,15 +136,15 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
           Their numbers go only to them and the coach.
         </div>
       )}
-      {error && <div className="callout danger">{error}</div>}
+      {error && <div className="callout danger" role="alert">{error}</div>}
       {concerns && (
         <div className="callout warn concerns" role="alert">
           <b>This doesn’t look like a typical healthy baseline.</b>
           <ul>{concerns.map((c) => <li key={c}>{c}</li>)}</ul>
           <span className="small">Baselines should be the athlete’s best effort: a poor one makes later checks look fine.</span>
           <div className="row">
-            <button className="primary" onClick={onDiscard}>Redo the test</button>
-            <button className="ghost" onClick={() => baseline(true)}>Save anyway</button>
+            <button className="primary" onClick={onDiscard} disabled={busy}>Redo the test</button>
+            <button className="ghost" onClick={() => baseline(true)} disabled={busy}>Save anyway</button>
           </div>
         </div>
       )}
