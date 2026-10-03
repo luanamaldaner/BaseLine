@@ -1,9 +1,8 @@
 // Reading results and comparing them to an athlete's baseline.
 //
-// Results live in Firestore under the team (teams/{teamId}/trials), synced
-// live by session.js. An athlete's app only receives their own results; the
-// coach's receives the whole team's. Scoring comes from shared/assess.js,
-// the same code the server uses for checks on teammates.
+// Results from the athlete record and legacy teams are merged by session.js.
+// Athletes receive their own results; coaches receive their athletes' records.
+// Scoring comes from shared/assess.js.
 
 import { getSession } from './session.js';
 import { SPECS, summarize, compareToSummary, spreadFor, FLAG_Z } from '../../shared/assess.js';

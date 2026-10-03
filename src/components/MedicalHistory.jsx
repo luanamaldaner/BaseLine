@@ -61,8 +61,8 @@ export function HistoryForm({ history }) {
     <div className="history-form panel">
       <h3>Medical history <span className="muted small">(optional)</span></h3>
       <p className="muted small">
-        These change what a normal result looks like and how long recovery takes, so your coach
-        sees them next to your results. Only you and your coach can see this.
+        These change what a normal result looks like and how long recovery takes, so your coaches
+        see them next to your results. Only you and your coaches can see this.
       </p>
       <label className="history-count">
         Prior concussions

@@ -3,6 +3,7 @@
 // they never have to type it.
 
 const KEY = 'pendingJoin';
+let captured = null;
 
 const normalize = (raw) => (raw ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 
@@ -12,10 +13,11 @@ export function captureInvite() {
   const code = normalize(params.get('join'));
   if (!params.has('join')) return;
   if (code.length === 6) {
+    captured = code;
     try {
       localStorage.setItem(KEY, code);
     } catch {
-      /* private mode: the athlete can still type the code */
+      /* Keep the invite for this visit when storage is unavailable. */
     }
   }
   params.delete('join');
@@ -25,13 +27,14 @@ export function captureInvite() {
 
 export function pendingInvite() {
   try {
-    return localStorage.getItem(KEY);
+    return captured ?? localStorage.getItem(KEY);
   } catch {
-    return null;
+    return captured;
   }
 }
 
 export function clearInvite() {
+  captured = null;
   try {
     localStorage.removeItem(KEY);
   } catch {

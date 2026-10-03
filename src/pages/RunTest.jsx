@@ -22,7 +22,7 @@ function TestBar({ title, who, onBack }) {
 // Pick who to test, then which test, then run it.
 // people: [{ uid, name }] the viewer may test. selfUid: the viewer if they're
 // an athlete (null for the coach). pick/setPick persist across reloads.
-export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
+export default function RunTest({ teams, people, selfUid, isCoach, pick, setPick }) {
   useScreenTop(`${pick.subjectUid}:${pick.testId}`);
   const subject = people.find((p) => p.uid === pick.subjectUid);
   const test = pick.testId && testById[pick.testId];
@@ -34,8 +34,10 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
         {people.length === 0 && (
           <div className="callout">No athletes on the team yet. Share the team code from the Team tab.</div>
         )}
-        <div className="people">
-          {people.map((p) => (
+        {[...teams.values()].map((team) => <div key={team.id}>
+          <h3>{team.name}</h3>
+          <div className="people">
+          {people.filter((p) => p.teamIds.includes(team.id)).map((p) => (
             <button key={p.uid} className="person" onClick={() => setPick({ subjectUid: p.uid, testId: null })}>
               <Avatar name={p.name} />
               <span className="person-text">
@@ -44,7 +46,8 @@ export default function RunTest({ people, selfUid, isCoach, pick, setPick }) {
               </span>
             </button>
           ))}
-        </div>
+          </div>
+        </div>)}
         {!isCoach && (
           <p className="muted small">
             Testing a teammate is for post-hit checks: you’ll see what to do, but not their numbers.

@@ -32,7 +32,7 @@ export default function History({ subjectUid, subjectName, isSelf, names }) {
   function remove(t) {
     const test = testById[t.test];
     if (!confirm(`Delete this ${test.label} ${t.kind === 'baseline' ? 'baseline trial' : 'check'} from ${formatWhen(t.at)}?`)) return;
-    deleteTrial(t.id).catch((e) => alert(`Couldn't delete: ${e.message}`));
+    deleteTrial(subjectUid, t.id).catch((e) => alert(`Couldn't delete: ${e.message}`));
   }
 
   const safeName = subjectName.replace(/[^\w-]+/g, '_');

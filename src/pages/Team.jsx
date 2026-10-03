@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TESTS, RESULT_TESTS } from '../tests/registry.js';
 import { exportCsv } from '../lib/baseline.js';
 import { STATUS, latestCheck, overallStatus, formatWhen, baselinesComplete } from '../lib/status.js';
-import { removeMember, leaveTeam } from '../lib/session.js';
+import { removeMember, leaveTeam, createTeam, joinTeam, lookupTeam, useSession, teamIdsOf } from '../lib/session.js';
 import { download } from './History.jsx';
 import Avatar from '../components/Avatar.jsx';
 import QrCode from '../components/QrCode.jsx';
-import { inviteUrl } from '../lib/invite.js';
+import { inviteUrl, pendingInvite, clearInvite } from '../lib/invite.js';
 import { AlertsPanel } from '../components/Alerts.jsx';
 import { HistoryForm } from '../components/MedicalHistory.jsx';
 import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
@@ -30,8 +30,9 @@ function greeting() {
 
 // Coach home: a way straight into a check, team numbers, and everyone on the
 // team with flagged players first.
-export function Roster({ members, coachName, onOpen, onRunCheck, alerts, names, onOpenPlayer }) {
-  const rows = members
+export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, names, onOpenPlayer }) {
+  const [filter, setFilter] = useState('');
+  const rows = members.filter((m) => !filter || m.teamIds.includes(filter))
     .map((m) => ({ ...m, ...playerSummary(m.uid) }))
     .sort((a, b) => RANK[a.overall] - RANK[b.overall] || a.name.localeCompare(b.name));
   const weekAgo = new Date(Date.now() - WEEK_MS).toISOString();
@@ -72,6 +73,10 @@ export function Roster({ members, coachName, onOpen, onRunCheck, alerts, names, 
       <div className="home-section">
         <div className="section-head">
           <h2>Roster</h2>
+          {teams.size > 1 && <select aria-label="Filter by team" value={filter} onChange={(e) => setFilter(e.target.value)}>
+            <option value="">All teams</option>
+            {[...teams.values()].map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+          </select>}
           {rows.length > 0 && <span className="muted small">Flagged players first. Tap one to see their results.</span>}
         </div>
         {!rows.length ? (
@@ -89,6 +94,7 @@ export function Roster({ members, coachName, onOpen, onRunCheck, alerts, names, 
                     <Avatar name={r.name} />
                     <span className="athlete-main">
                       <b>{r.name}</b>
+                      <span className="team-tags">{r.teamIds.map((id) => <span className="chip muted" key={id}>{teams.get(id)?.name}</span>)}</span>
                       <span className="muted small">
                         {r.lastCheck ? `Checked ${formatWhen(r.lastCheck)}` : 'No checks yet'}
                       </span>
@@ -126,7 +132,7 @@ function Ring({ done, total }) {
 }
 
 // Coach: join code + manage athletes.
-export function CoachTeam({ team, members, names }) {
+function CoachTeamCard({ team, members, names }) {
   const [copied, setCopied] = useState(null); // 'code' | 'link'
   const link = inviteUrl(team.code);
   const copy = (what, text) => {
@@ -147,7 +153,7 @@ export function CoachTeam({ team, members, names }) {
   };
   const remove = (m) => {
     if (confirm(`Remove ${m.name} from ${team.name}? Their results stay saved.`)) {
-      removeMember(m.uid).catch((e) => alert(`Couldn't remove: ${e.message}`));
+      removeMember(team.id, m.uid).catch((e) => alert(`Couldn't remove: ${e.message}`));
     }
   };
 
@@ -200,11 +206,11 @@ export function CoachTeam({ team, members, names }) {
   );
 }
 
-// Athlete: their team, their medical history, and leave.
-export function AthleteTeam({ team, members, history }) {
+// Athlete: their team + leave.
+function AthleteTeamCard({ team, members }) {
   const leave = () => {
-    if (confirm(`Leave ${team.name}? Your results stay with the team's coach.`)) {
-      leaveTeam().catch((e) => alert(`Couldn't leave: ${e.message}`));
+    if (confirm(`Leave ${team.name}? Your results stay in your record.`)) {
+      leaveTeam(team.id).catch((e) => alert(`Couldn't leave: ${e.message}`));
     }
   };
   return (
@@ -219,8 +225,82 @@ export function AthleteTeam({ team, members, history }) {
         You can run post-hit checks on any teammate. You only ever see your own numbers; your
         coach sees everyone’s.
       </p>
-      <HistoryForm key={history?.updatedAt ?? 'new'} history={history} />
       <button className="danger-btn" onClick={leave}>Leave team</button>
     </section>
   );
+}
+
+export function CoachTeam({ teams, members, names }) {
+  return <div className="team-pages">
+    {[...teams.values()].map((team) => <CoachTeamCard key={team.id} team={team}
+      members={members.filter((m) => m.teamIds.includes(team.id))} names={names} />)}
+    <TeamForm coach />
+  </div>;
+}
+
+export function AthleteTeam({ teams, members, history }) {
+  return <div className="team-pages">
+    {[...teams.values()].map((team) => <AthleteTeamCard key={team.id} team={team}
+      members={members.filter((m) => m.teamIds.includes(team.id))} />)}
+    <HistoryForm key={history?.updatedAt ?? 'new'} history={history} />
+    <TeamForm />
+  </div>;
+}
+
+function TeamForm({ coach = false }) {
+  const [value, setValue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  async function submit(e) {
+    e.preventDefault(); setBusy(true); setError(null);
+    try {
+      if (coach) await createTeam(value);
+      else await joinTeam(value);
+      setValue('');
+    } catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
+  return <section className="panel">
+    <h2>{coach ? 'Create another team' : 'Join another team'}</h2>
+    <form className="setup-form" onSubmit={submit}>
+      <input aria-label={coach ? 'Team name' : 'Team code'} placeholder={coach ? 'Team name' : 'Team code'}
+        maxLength={coach ? 60 : 6} value={value} onChange={(e) => setValue(coach ? e.target.value : e.target.value.toUpperCase())} />
+      {error && <div className="form-error">{error}</div>}
+      <button className="primary" disabled={busy || !value.trim()}>{busy ? 'One moment…' : coach ? 'Create team' : 'Join team'}</button>
+    </form>
+  </section>;
+}
+
+export function InviteOffer() {
+  const s = useSession();
+  const [code, setCode] = useState(pendingInvite);
+  const [team, setTeam] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const dismiss = () => { clearInvite(); setCode(null); };
+  useEffect(() => {
+    if (!code) return;
+    let active = true;
+    lookupTeam(code).then((t) => {
+      if (!active) return;
+      if (teamIdsOf(s.profile).includes(t.id)) dismiss();
+      else setTeam(t);
+    }).catch((e) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, [code, s.profile]);
+  if (!code) return null;
+  async function join() {
+    setBusy(true); setError(null);
+    try { await joinTeam(code); dismiss(); }
+    catch (e) { setError(e.message); }
+    finally { setBusy(false); }
+  }
+  return <section className="callout">
+    <h2>{team ? 'Join ' + team.name + '?' : 'Team invite'}</h2>
+    {error && <p className="form-error">{error}</p>}
+    <div className="row">
+      <button className="primary" disabled={!team || busy} onClick={join}>{busy ? 'Joining…' : 'Join team'}</button>
+      <button className="ghost" disabled={busy} onClick={dismiss}>Dismiss</button>
+    </div>
+  </section>;
 }
