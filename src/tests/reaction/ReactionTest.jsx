@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { REACTION, METRICS, randomDelay, computeReaction } from './reaction.js';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
+import { say } from '../../lib/cues.js';
 
 const TEST = 'reaction';
 
@@ -189,6 +190,12 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
             <li>Tapping before green counts as a mistake.</li>
             <li>Use your dominant hand, the same way each time.</li>
           </ul>
+          <button
+            className="ghost speak-btn"
+            onClick={() => say('Tap the box as soon as it turns green. If you tap too early, just wait for the next one. Use your usual hand.')}
+          >
+            🔊 Read the instructions to me
+          </button>
           <div className="row">
             <button className="primary" onClick={start}>
               {phase === 'results' ? 'Run again' : 'Start test'}

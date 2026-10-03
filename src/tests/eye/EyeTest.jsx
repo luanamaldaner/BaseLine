@@ -13,7 +13,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Guided mode (the Run-all flow): no header, intro, or results of its own.
 // The camera warms up on mount; the sweep starts when `startSignal` changes
 // and the outcome goes to `onFinished`.
-export default function EyeTest({ subject, isSelf, canSeeData, guided = false, startSignal = 0, onFinished }) {
+// `speak`: read the walk-through aloud. Off by default — the eyes are open,
+// so the text on the stage is enough; the athlete opts in with the speaker
+// button (or the flow passes it through).
+export default function EyeTest({ subject, isSelf, canSeeData, guided = false, speak = false, startSignal = 0, onFinished }) {
   const videoRef = useRef(null);
   const overlayRef = useRef(null);
   const dotRef = useRef(null);
@@ -26,7 +29,10 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
   const [phase, setPhaseState] = useState('preview'); // preview | calibrate | pursuit | results
   const [stageText, setStageText] = useState('');
   const [stageCount, setStageCount] = useState(null); // 3, 2, 1 before each part
+  const [readAloud, setReadAloud] = useState(false); // standalone speaker button
   const runningRef = useRef(false); // runTest in flight
+  const speakRef = useRef(false);
+  speakRef.current = guided ? speak : readAloud;
   const [live, setLive] = useState(null);
   const [result, setResult] = useState(null);
   const [runId, setRunId] = useState(0); // fresh save buttons per run
@@ -119,7 +125,7 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
   // overlay did, before they had settled: those samples were junk.
   async function walkThrough(text) {
     setStageText(text);
-    say(text);
+    if (speakRef.current) say(text);
     await sleep(2200);
     checkAbort();
     for (let n = 3; n > 0; n--) {
@@ -254,6 +260,15 @@ export default function EyeTest({ subject, isSelf, canSeeData, guided = false, s
             <li>Keep your head still; move only your eyes.</li>
             <li>Press Esc to stop a test.</li>
           </ul>
+          <button
+            className="ghost speak-btn"
+            onClick={() => {
+              setReadAloud(true);
+              say('Sit an arm\u2019s length from the screen with your face well lit. Keep your head still and move only your eyes. A dot will appear: look right at it, and when it jumps, look at the new spot. Then follow the moving dot.');
+            }}
+          >
+            🔊 {readAloud ? 'Read it again' : 'Read the instructions to me'}
+          </button>
           <div className="row">
             <button className="primary" disabled={status !== 'ready'} onClick={runTest}>
               {phase === 'results' ? 'Run again' : 'Start test'}

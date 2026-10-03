@@ -185,7 +185,11 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
         <div className="panel balance-intro">
           <ol className="tips">
             <li>Shoes off, firm floor. The athlete holds the phone flat against their chest with both hands.</li>
-            <li>Turn the sound up: a beep and a voice say when to close and open the eyes.</li>
+            <li>
+              <b>Sound on.</b> Turn the volume up and switch off Silent mode and Do Not Disturb — on an
+              iPhone the ring switch mutes web audio. With eyes closed, the beep and the voice are the
+              only cues for when to close and open them.
+            </li>
             <li>
               An examiner watches and counts errors: opening the eyes, stepping or stumbling,
               lifting the forefoot or heel, or moving the hands off the chest. They enter the

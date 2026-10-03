@@ -31,6 +31,7 @@ const STEPS = [
     ],
     examiner: 'Hand them the device. Dominant hand, same way every time.',
     spoken: 'Sit down. Tap the box as soon as it turns green.',
+    autoSpeak: false, // eyes are open: reading is enough, speech on request
   },
   {
     id: 'eye',
@@ -43,6 +44,7 @@ const STEPS = [
     ],
     examiner: 'Face toward the light, an arm’s length from the screen. Glasses off if they can.',
     spoken: 'Keep your head still. Look at each dot. Then follow the moving dot with just your eyes.',
+    autoSpeak: false,
   },
   {
     id: 'balance',
@@ -55,6 +57,10 @@ const STEPS = [
     ],
     examiner: 'Stand right next to them. After each stance, count what you saw: eyes opened, a step, hands off the chest.',
     spoken: 'Stand up and take your shoes off. Hold the phone flat on your chest. When you hear the beep, close your eyes and stand still.',
+    // Eyes will be closed: the beep and the voice are the only cues, so this
+    // one always speaks, and the screen warns about anything that mutes it.
+    autoSpeak: true,
+    soundNote: 'Turn the volume up and switch off Silent mode and Do Not Disturb. On an iPhone the ring switch mutes the beep and the voice.',
     skippable: true, // needs a phone's motion sensor
   },
 ];
@@ -76,6 +82,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
   const [startSignal, setStartSignal] = useState(0);
   const [results, setResults] = useState({});
   const [failure, setFailure] = useState(null);
+  const [readAloud, setReadAloud] = useState(false); // speaker button tapped on this ready screen
   // Taps arrive faster than React re-renders, so state alone can't stop a
   // double-tap from starting a test twice or skipping two tests at once.
   const startedRef = useRef(false); // a start has been issued for this ready screen
@@ -84,15 +91,22 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
   const step = STEPS[stepIdx];
   const test = testById[step.id];
 
-  // Speak the instructions whenever a ready screen appears.
+  // Speak the instructions when a ready screen appears, only for the test
+  // that needs it; the others have a speaker button instead.
   useEffect(() => {
-    if (stage === 'ready') say(step.spoken);
-    if (stage === 'summary') say('All done. Nice work.');
+    if (stage === 'ready' && step.autoSpeak) say(step.spoken);
     return hush;
   }, [stage, stepIdx]);
 
+  function readInstructions() {
+    unlockAudio();
+    setReadAloud(true);
+    say(step.spoken);
+  }
+
   function goReady() {
     startedRef.current = false;
+    setReadAloud(false);
     setAttempt((n) => n + 1);
     setStartSignal(0);
     setStage('ready');
@@ -195,6 +209,12 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
           <ol className="flow-instr">
             {step.athlete.map((line) => <li key={line}>{line}</li>)}
           </ol>
+          {!step.autoSpeak && (
+            <button className="ghost speak-btn" onClick={readInstructions}>
+              🔊 {readAloud ? 'Read it again' : 'Read this to me'}
+            </button>
+          )}
+          {step.soundNote && <div className="callout flow-sound">🔈 <b>Sound on.</b> {step.soundNote}</div>}
           <p className="flow-examiner"><b>Examiner:</b> {step.examiner}</p>
           <div className="row">
             <button className="primary big-btn" onClick={start}>Start</button>
@@ -232,6 +252,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
             isSelf={isSelf}
             canSeeData={canSeeData}
             guided
+            speak={step.autoSpeak || readAloud}
             startSignal={startSignal}
             onFinished={finished}
           />

@@ -389,3 +389,7 @@ button.link { background: none; border: none; padding: 0; color: var(--accent); 
   font-size: 6rem; font-weight: 800; line-height: 1; color: #fff;
   font-variant-numeric: tabular-nums;
 }
+
+/* Speech on request: a speaker button beside the instructions */
+.speak-btn { justify-self: start; font-size: 1rem; }
+.flow-sound { margin: 0; }
