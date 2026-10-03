@@ -5,12 +5,22 @@
 //         'talk'   open mouth + sound waves (read aloud)
 //         'sound'  wide eyes + sound waves on both sides (turn the sound on)
 
-const BODY = '#fcc934';
 const LINE = '#4a2f17';
-const BAND = '#10b981';
 const CHEEK = '#ff8fa3';
 
-export default function DotEmoji({ mood = 'happy', size = 20, label }) {
+// Dot color presets people can pick as their profile picture.
+export const DOT_PRESETS = {
+  sunny: { body: '#fcc934', band: '#10b981', label: 'Sunny' },
+  mint: { body: '#86efac', band: '#38bdf8', label: 'Mint' },
+  sky: { body: '#7dd3fc', band: '#fbbf24', label: 'Sky' },
+  berry: { body: '#f9a8d4', band: '#10b981', label: 'Berry' },
+  grape: { body: '#c4b5fd', band: '#fb7185', label: 'Grape' },
+  tangerine: { body: '#fdba74', band: '#38bdf8', label: 'Tangerine' },
+};
+
+export default function DotEmoji({ mood = 'happy', size = 20, label, preset }) {
+  const colors = DOT_PRESETS[preset] ?? DOT_PRESETS.sunny;
+  const clip = `dotemoji-${mood}-${preset ?? 'sunny'}`;
   const waves = mood === 'talk' || mood === 'sound';
   return (
     <svg
@@ -23,12 +33,12 @@ export default function DotEmoji({ mood = 'happy', size = 20, label }) {
       aria-hidden={label ? undefined : true}
     >
       <defs>
-        <clipPath id={`dotemoji-${mood}`}><circle cx="16" cy="17" r="12.5" /></clipPath>
+        <clipPath id={clip}><circle cx="16" cy="17" r="12.5" /></clipPath>
       </defs>
-      <circle cx="16" cy="17" r="12.5" fill={BODY} />
+      <circle cx="16" cy="17" r="12.5" fill={colors.body} />
       {/* headband */}
-      <g clipPath={`url(#dotemoji-${mood})`}>
-        <path d="M2 8.5 Q16 5 30 8.5 L30 12.5 Q16 9 2 12.5 Z" fill={BAND} />
+      <g clipPath={`url(#${clip})`}>
+        <path d="M2 8.5 Q16 5 30 8.5 L30 12.5 Q16 9 2 12.5 Z" fill={colors.band} />
         <path d="M2 10.5 Q16 7 30 10.5" fill="none" stroke="#fff" strokeWidth="1" />
       </g>
       <circle cx="16" cy="17" r="12.5" fill="none" stroke={LINE} strokeWidth="1.6" />
@@ -59,7 +69,7 @@ export default function DotEmoji({ mood = 'happy', size = 20, label }) {
       )}
 
       {waves && (
-        <g fill="none" stroke={BAND} strokeWidth="1.8" strokeLinecap="round">
+        <g fill="none" stroke={colors.band} strokeWidth="1.8" strokeLinecap="round">
           <path d="M31.5 13 q2.5 4 0 8" />
           <path d="M34.5 10.5 q4 6.5 0 13" />
           {mood === 'sound' && (

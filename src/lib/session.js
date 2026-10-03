@@ -32,6 +32,7 @@ const empty = () => ({
   recordsReady: new Set(),
   ranges: new Map(), // `${uid}_${test}` -> { subjectUid, test, n, limits }
   history: new Map(), // uid -> { concussions, adhd, vision, vestibular, updatedAt } (own, or everyone's as coach)
+  avatars: new Map(), // uid -> { kind: 'photo' | 'dot', photo?, dot?, updatedAt } (everyone on my teams)
   pendingWrites: 0, // results written locally and not yet acknowledged by the server
   trialWrites: new Map(), // id -> { status: 'pending' | 'saved' | 'failed', error? }
   syncError: null,
@@ -94,6 +95,18 @@ function startTeams(teamIds, uid, role) {
   const teams = new Map(), rosters = new Map(), sources = new Map(), rangesByTeam = new Map();
   const records = new Map(), ready = new Set(), confirmed = new Set(), expected = new Set(teamIds.map((id) => 'legacy:' + id));
   const histories = new Map();
+  const avatarsByTeam = new Map();
+  const publishAvatars = (teamId, docs) => {
+    if (!active) return;
+    avatarsByTeam.set(teamId, docs);
+    const avatars = new Map();
+    for (const list of avatarsByTeam.values()) for (const [who, a] of list) {
+      const previous = avatars.get(who);
+      if (!previous || Date.parse(a.updatedAt) > Date.parse(previous.updatedAt)) avatars.set(who, a);
+    }
+    mergeLocalAvatar(avatars, uid);
+    set({ avatars });
+  };
   const publishHistory = (teamId, docs) => {
     if (!active) return;
     histories.set(teamId, docs);
@@ -161,6 +174,11 @@ function startTeams(teamIds, uid, role) {
       : onSnapshot(doc(db, 'teams', teamId, 'history', uid), (d) => {
           publishHistory(teamId, d.exists() ? new Map([[uid, d.data()]]) : new Map());
         }, fail));
+    // Profile pictures. Missing permission (rules not deployed yet) just
+    // means no pictures: initials show instead, and it isn't an error.
+    unsubs.team.push(onSnapshot(collection(db, 'teams', teamId, 'avatars'), (snap) => {
+      publishAvatars(teamId, new Map(snap.docs.map((d) => [d.id, d.data()])));
+    }, () => publishAvatars(teamId, new Map())));
     unsubs.team.push(onSnapshot(doc(db, 'teams', teamId), { includeMetadataChanges: true }, (d) => {
       if (!active || (!d.exists() && d.metadata.fromCache)) return;
       noteServer(d.metadata);
@@ -298,7 +316,7 @@ function watchProfile(user, attempt = 0) {
       if (key) startTeams(ids, user.uid, profile.role);
       else {
         stopTeam();
-        set({ teams: new Map(), members: new Map(), trials: new Map(), trialsReady: false, rangesReady: false, recordsReady: new Set(), ranges: new Map(), rangesByTeam: new Map(), history: new Map() });
+        set({ teams: new Map(), members: new Map(), trials: new Map(), trialsReady: false, rangesReady: false, recordsReady: new Set(), ranges: new Map(), rangesByTeam: new Map(), history: new Map(), avatars: new Map() });
       }
     }
   };
@@ -709,4 +727,51 @@ export async function deleteTrial(subjectUid, id) {
   for (const path of trial.paths ?? [trial.path]) batch.delete(doc(db, path));
   await withTimeout(batch.commit());
   if (trial.kind === 'baseline') syncRanges(subjectUid);
+}
+
+// Your profile picture, on every team you belong to (or coach), so teammates
+// and the coach see it. avatar: { kind: 'photo', photo: dataUrl } |
+// { kind: 'dot', dot: presetId } | null to go back to initials.
+//
+// It shows on this device immediately and is remembered here, so changing it
+// always works; the team copy syncs in the background. The returned promise
+// settles when the team copy is saved (or fails, e.g. rules not deployed or
+// the daily quota used up), so the screen can say whether teammates see it.
+export function saveAvatar(avatar) {
+  const me = uid();
+  const record = avatar ? { ...avatar, updatedAt: now() } : { kind: 'none', updatedAt: now() };
+  try { localStorage.setItem(localAvatarKey(me), JSON.stringify(record)); } catch { /* private mode */ }
+  const avatars = new Map(state.avatars);
+  if (avatar) avatars.set(me, record); else avatars.delete(me);
+  set({ avatars });
+
+  const batch = writeBatch(db);
+  for (const id of teamIdsOf(state.profile)) {
+    const ref = doc(db, 'teams', id, 'avatars', me);
+    if (avatar) batch.set(ref, record);
+    else batch.delete(ref);
+  }
+  return withTimeout(batch.commit());
+}
+
+// This device's own last choice, if it's newer than the team copy (for
+// example while the team copy can't be saved yet). kind 'none' = initials.
+const localAvatarKey = (who) => `avatar:${who}`;
+function mergeLocalAvatar(avatars, me) {
+  if (!me) return;
+  let local = null;
+  try { local = JSON.parse(localStorage.getItem(localAvatarKey(me))); } catch { /* ignore */ }
+  if (!local) return;
+  const team = avatars.get(me);
+  if (team && Date.parse(team.updatedAt) >= Date.parse(local.updatedAt)) return;
+  if (local.kind === 'none') avatars.delete(me); else avatars.set(me, local);
+}
+
+// Plain-language version of a database error. "Quota exceeded" means the
+// Firebase project used up its free daily allowance; it resets every day.
+export function describeError(e) {
+  if (e?.code === 'resource-exhausted' || /quota/i.test(e?.message ?? '')) {
+    return 'The app has used up its free daily database allowance. Sign-ups and saves will work again after it resets (midnight US Pacific time), or once the Firebase project is upgraded.';
+  }
+  return e?.message || 'Something went wrong. Try again.';
 }

@@ -11,7 +11,7 @@ import { getSession } from './session.js';
 // Tests run together (e.g. "All three") arrive as separate checks; ones on the
 // same athlete within this window are one alert.
 const GROUP_MS = 15 * 60 * 1000;
-const RANK = { monitor: 1, refer: 2, 'no-baseline': 2 };
+const RANK = { monitor: 1, refer: 2 };
 
 const seenKey = (uid) => `alerts-seen:${uid}`;
 

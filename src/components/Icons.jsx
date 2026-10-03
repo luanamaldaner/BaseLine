@@ -1,4 +1,5 @@
-// Icons and small illustrations. All inherit color from CSS (currentColor).
+// Icons and small illustrations. The UI glyphs (check, close, arrows) take
+// their color from CSS; the rest are hand-made in Dot's style.
 
 const stroke = {
   fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
@@ -13,70 +14,91 @@ function Svg({ size = 24, children, label }) {
   );
 }
 
+// Hand-made icons in Dot's style: the same brown outline and flat colors as
+// the mascot, so nothing looks like a stock icon pack.
+const L = '#4a2f17'; // outline
+const W = 1.6; // outline width
+const Y = '#fcc934'; // Dot yellow
+const G = '#10b981'; // headband green
+// Free-standing lines (arms, legs, lashes, speed lines) switch to a light
+// color in dark mode; outlines around filled shapes stay brown.
+const LINE_FREE = 'var(--icon-line)';
+const ln = { fill: 'none', stroke: LINE_FREE, strokeWidth: W, strokeLinecap: 'round', strokeLinejoin: 'round' };
+const fillLine = (fill) => ({ fill, stroke: L, strokeWidth: W, strokeLinejoin: 'round' });
+
 export const SymptomsIcon = (p) => (
   <Svg {...p}>
-    <g {...stroke}>
-      <rect x="5" y="4" width="14" height="17" rx="2.5" />
-      <path d="M9 4.5V3h6v1.5" />
-      <path d="M8.5 10.5l1.5 1.5 3-3M8.5 16h7" />
-    </g>
+    <rect x="5" y="4" width="14" height="17" rx="2.5" {...fillLine('#c98a4b')} />
+    <rect x="7.5" y="6.5" width="9" height="12.5" rx="1" fill="#fff" />
+    <rect x="9" y="2.8" width="6" height="3" rx="1.2" {...fillLine('#e5e7eb')} />
+    <path d="M9 11l1.5 1.5 3-3" fill="none" stroke={G} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M9 16h6" fill="none" stroke="#94a3b8" strokeWidth="1.6" strokeLinecap="round" />
   </Svg>
 );
 
 export const BalanceIcon = (p) => (
   <Svg {...p}>
-    <g {...stroke}>
-      <circle cx="12" cy="4.5" r="2" />
-      <path d="M12 7.5v7M12 14.5l-1 6.5M12 14.5l4.5 1.5 1.5-3M5 10l7-1.5 7 1.5" />
-    </g>
+    {/* a tiny Dot balancing on one leg */}
+    <path d="M7 10.5L4.5 9M17 10.5l2.5-1.5" {...ln} />
+    <path d="M11 14.5V20M13 14.5l3 1.8-2 1.5" {...ln} />
+    <ellipse cx="10.4" cy="20.6" rx="2.2" ry="1.1" {...fillLine(G)} />
+    <circle cx="12" cy="9.5" r="5.5" {...fillLine(Y)} />
+    <path d="M6.8 7.6Q12 5.6 17.2 7.6" fill="none" stroke={G} strokeWidth="1.8" />
+    <circle cx="10.2" cy="9.6" r="0.9" fill={L} />
+    <circle cx="13.8" cy="9.6" r="0.9" fill={L} />
+    <path d="M10.8 11.8q1.2 1 2.4 0" {...ln} strokeWidth="1.2" />
   </Svg>
 );
 
 export const ReactionIcon = (p) => (
   <Svg {...p}>
-    <path d="M13.5 2.5L5 13.5h6l-1.5 8 8.5-11h-6z" {...stroke} />
+    <path d="M14 2.5L5.5 13.5h5.5l-1.5 8 9-11.5H13z" {...fillLine(Y)} />
+    <path d="M3 6h3M2 9.5h2.5M19 16h2.5M18.5 19.5h3" {...ln} />
   </Svg>
 );
 
 export const EyeIcon = (p) => (
   <Svg {...p}>
-    <g {...stroke}>
-      <path d="M2 12s3.6-6.5 10-6.5S22 12 22 12s-3.6 6.5-10 6.5S2 12 2 12z" />
-      <circle cx="12" cy="12" r="3" />
-    </g>
+    <path d="M2.5 13s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6z" {...fillLine('#fff')} />
+    <circle cx="12" cy="13" r="3.6" fill={G} stroke={L} strokeWidth="1.2" />
+    <circle cx="12" cy="13" r="1.6" fill={L} />
+    <circle cx="13.2" cy="11.8" r="0.8" fill="#fff" />
+    <path d="M7 6.5L6 4.5M12 5V3M17 6.5l1-2" {...ln} />
   </Svg>
 );
 
 export const UsersIcon = (p) => (
   <Svg {...p}>
-    <g {...stroke}>
-      <circle cx="9" cy="8" r="3.5" />
-      <path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5M16 4.8a3.5 3.5 0 010 6.4M18 14.8c1.8.7 3 2.4 3.5 5.2" />
-    </g>
+    {/* two Dots: a teammate behind, one in front */}
+    <circle cx="15.5" cy="10" r="4.8" {...fillLine('#fde68a')} />
+    <path d="M11 8.4Q15.5 6.6 20 8.4" fill="none" stroke="#38bdf8" strokeWidth="1.6" />
+    <circle cx="9" cy="13" r="6" {...fillLine(Y)} />
+    <path d="M3.4 11Q9 8.8 14.6 11" fill="none" stroke={G} strokeWidth="1.8" />
+    <circle cx="7.2" cy="13.4" r="0.9" fill={L} />
+    <circle cx="10.8" cy="13.4" r="0.9" fill={L} />
+    <path d="M7.8 15.6q1.2 1 2.4 0" {...ln} strokeWidth="1.2" />
   </Svg>
 );
 
 export const ShieldIcon = (p) => (
   <Svg {...p}>
-    <g {...stroke}>
-      <path d="M12 2.5l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10v-6z" />
-      <path d="M8.5 12l2.5 2.5 4.5-5" />
-    </g>
+    <path d="M12 2.5l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10v-6z" {...fillLine(G)} />
+    <path d="M8.3 12l2.6 2.6 4.8-5.2" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
 export const PulseIcon = (p) => (
   <Svg {...p}>
-    <path d="M2 12h4l3-7 4 14 3-7h6" {...stroke} />
+    <path d="M12 20.5S3 15 3 8.8C3 6 5 4 7.4 4c2 0 3.4 1.2 4.6 3 1.2-1.8 2.6-3 4.6-3C19 4 21 6 21 8.8c0 6.2-9 11.7-9 11.7z" {...fillLine('#ff8fa3')} />
+    <path d="M5 11h3.2l1.6-3 2.4 6 1.6-3H19" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
   </Svg>
 );
 
 export const AlertIcon = (p) => (
   <Svg {...p}>
-    <g {...stroke}>
-      <path d="M10.3 3.8L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.8a2 2 0 00-3.4 0z" />
-      <path d="M12 9.5v4.5M12 17.5h.01" />
-    </g>
+    <path d="M10.3 3.8L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.8a2 2 0 00-3.4 0z" {...fillLine('#fbbf24')} />
+    <path d="M12 9v5" stroke={L} strokeWidth="2.2" strokeLinecap="round" />
+    <circle cx="12" cy="17.3" r="1.3" fill={L} />
   </Svg>
 );
 
@@ -102,7 +124,7 @@ export function TestBadge({ id, size = 44 }) {
   const { Icon, color } = theme;
   return (
     <span className="test-badge" style={{ '--tc': color, width: size, height: size }}>
-      <Icon size={Math.round(size * 0.55)} />
+      <Icon size={Math.round(size * 0.74)} />
     </span>
   );
 }
@@ -137,13 +159,25 @@ export function StanceDiagram({ id, size = 140 }) {
 }
 
 export const HomeIcon = (p) => (
-  <Svg {...p}><path d="M3 10l9-7 9 7v11h-6v-7H9v7H3z" {...stroke} /></Svg>
+  <Svg {...p}>
+    <path d="M5 10.5V20h14v-9.5" {...fillLine(Y)} />
+    <path d="M2.5 11.5L12 3.5l9.5 8" {...fillLine(G)} />
+    <rect x="10" y="14" width="4" height="6" rx="1" {...fillLine('#c98a4b')} />
+  </Svg>
 );
 export const HistoryIcon = (p) => (
-  <Svg {...p}><g {...stroke}><circle cx="12" cy="12" r="9" /><path d="M12 6v6l4 2" /></g></Svg>
+  <Svg {...p}>
+    <circle cx="12" cy="12.5" r="8.5" {...fillLine('#fff')} />
+    <path d="M12 7.5v5l3.5 2" fill="none" stroke={G} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 2.8h8" {...ln} />
+  </Svg>
 );
 export const BookIcon = (p) => (
-  <Svg {...p}><path d="M12 5v16M12 5C9 3 5 3 2 4v15c3-1 7-1 10 2 3-3 7-3 10-2V4c-3-1-7-1-10 1z" {...stroke} /></Svg>
+  <Svg {...p}>
+    <path d="M12 6.5C9.5 4.5 6 4.3 2.5 5v14c3.5-.7 7-.5 9.5 1.5z" {...fillLine('#fff')} />
+    <path d="M12 6.5c2.5-2 6-2.2 9.5-1.5v14c-3.5-.7-7-.5-9.5 1.5z" {...fillLine(G)} />
+    <path d="M5 9h4M5 12h4M15 9h4M15 12h4" fill="none" stroke="#94a3b8" strokeWidth="1.2" strokeLinecap="round" />
+  </Svg>
 );
 
 // Small UI glyphs, drawn so they match the app instead of the device's

@@ -64,7 +64,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
       <div className="stats" aria-label="Team summary" data-tour="stats">
         {stats.map(({ label, value, Icon, tone }) => (
           <div className={`stat ${tone}`} key={label}>
-            <span className="stat-icon"><Icon size={22} /></span>
+            <span className="stat-icon"><Icon size={28} /></span>
             <span className="stat-value">{value}</span>
             <span className="stat-label">{label}</span>
           </div>
@@ -92,7 +92,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
               return (
                 <li key={r.uid}>
                   <button className="athlete-card" data-status={st?.cls} onClick={() => onOpen(r.uid)}>
-                    <Avatar name={r.name} />
+                    <Avatar name={r.name} uid={r.uid} />
                     <span className="athlete-main">
                       <b>{r.name}</b>
                       <span className="team-tags">{r.teamIds.map((id) => <span className="chip muted" key={id}>{teams.get(id)?.name}</span>)}</span>

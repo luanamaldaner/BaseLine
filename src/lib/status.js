@@ -23,9 +23,10 @@ export function latestCheck(subjectUid, test) {
 // refer; a single "monitor" means monitor. A check with no baseline to
 // compare against counts as "refer", matching what the tester was told.
 export function overallStatus(checks) {
-  const statuses = checks.filter(Boolean).map((c) =>
-    c.comparison.status === 'no-baseline' ? 'refer' : c.comparison.status,
-  );
+  // A test with no baseline can't be compared, so it doesn't count toward
+  // the call (it used to count as "refer", which made a missing baseline
+  // look like a concussion).
+  const statuses = checks.filter(Boolean).map((c) => c.comparison.status).filter((st) => st !== 'no-baseline');
   if (!statuses.length) return null;
   const monitors = statuses.filter((s) => s === 'monitor').length;
   if (statuses.includes('refer') || monitors >= 2) return 'refer';

@@ -16,6 +16,8 @@ import Tour, { tourSeen, markTourSeen } from './components/Tour.jsx';
 import { ConsentScreen, PrivacyDialog } from './pages/Privacy.jsx';
 import { useCoachAlerts } from './components/Alerts.jsx';
 import { BackIcon } from './components/Icons.jsx';
+import Avatar from './components/Avatar.jsx';
+import ProfilePicture from './components/ProfilePicture.jsx';
 
 // UI state that should survive a reload (phones reload tabs in the background).
 function usePersisted(key, initial) {
@@ -132,6 +134,7 @@ function nameMap(s) {
 // footer so the test gets the whole screen on a phone.
 function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
   const [privacy, setPrivacy] = useState(false);
+  const [editingPicture, setEditingPicture] = useState(false);
   // Guided tour: from the Tutorial button, and once on first visit.
   const [touring, setTouring] = useState(() => !focus && !tourSeen(s.user.uid));
   const endTour = () => { markTourSeen(s.user.uid); setTouring(false); };
@@ -184,6 +187,10 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
               {s.teams.size === 1 ? [...s.teams.values()][0].name : `${s.teams.size} teams`}
             </span>
             <div className="account-name" title={`${s.profile.name} (${s.profile.role})`}>
+              <button className="ghost avatar-btn" onClick={() => setEditingPicture(true)}
+                aria-label="Change your profile picture" title="Change your profile picture">
+                <Avatar name={s.profile.name} uid={s.user.uid} size={34} />
+              </button>
               <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
             </div>
             <div className="header-actions">
@@ -226,6 +233,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
         </footer>
       )}
       {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
+      {editingPicture && <ProfilePicture onClose={() => setEditingPicture(false)} />}
       {touring && !focus && <Tour role={s.profile.role} setTab={setTab} onClose={endTour} />}
     </div>
   );
