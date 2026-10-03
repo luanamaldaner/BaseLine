@@ -66,6 +66,19 @@ The [overall call](src/lib/status.js) is Refer if any included test is Refer or 
 
 **This is a screening tool, not a diagnosis. The cutoffs are not clinically validated yet.** A normal result cannot rule out concussion or clear an athlete to return to play. Anyone with a suspected concussion should be removed from play and evaluated by a clinician regardless of the app's call. A clinical validation study is the next step.
 
+### How often a healthy athlete gets flagged
+
+With only a few baseline trials the sample SD is a rough estimate, so "2 spreads worse than baseline" fires on healthy athletes more often than 2 SD suggests. Simulated with the app's own spread rule (`node scripts/falsepositives.mjs`), eight scored metrics, and a healthy athlete:
+
+| Metric's real trial-to-trial variation | 3 baseline trials: any flag / "refer" | 5 trials: any flag / "refer" |
+|---|---|---|
+| 5% of its mean | 0.4% / 0% | 0.2% / 0% |
+| 10% | 26% / 3% | 21% / 2% |
+| 20% | 54% / 17% | 42% / 9% |
+| 30% | 59% / 20% | 44% / 10% |
+
+The 10%-of-mean floor on the spread handles steady metrics; for noisy ones (sway, balance errors, saccade rate, reaction spread are likely in the 20–30% band) the false "refer" rate with three baselines is around one in six. Two levers, both deliberate decisions about sensitivity versus false alarms rather than code fixes: record five baseline trials instead of three (roughly halves it), or scale the spread by a small-sample factor in `spreadFor` (a *t*-based prediction interval; makes three-trial baselines much less sensitive). Measure the real rate with healthy retests before choosing.
+
 ## Testing protocol (and why)
 
 Every result is compared to the athlete's **own baseline**, so anything that differs between the baseline and the check can look like a concussion. The protocol keeps conditions the same, and the app enforces or records what it can.
@@ -154,6 +167,11 @@ npm run dev:phone
 Open the HTTPS network URL printed by Vite on the phone and accept the local development certificate if prompted. Grant camera/motion permissions as requested; phone mode uses a self-signed HTTPS certificate.
 
 For logged-in screen previews without an account, development builds expose the **`__previewSession`** browser-console hook from [src/lib/session.js](src/lib/session.js). It accepts a partial session state with mock profile, team, and `Map` data. This changes local UI state only; it does not authenticate Firebase writes and is omitted from production builds.
+
+```bash
+npm test                       # eye-pursuit metrics on synthetic recordings with known lag and gain
+node scripts/falsepositives.mjs  # how often the scoring rule flags a healthy athlete
+```
 
 ### Deployment
 

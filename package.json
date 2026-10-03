@@ -8,7 +8,8 @@
     "dev:phone": "vite --host --mode phone",
     "build": "vite build",
     "preview": "vite preview",
-    "postinstall": "node scripts/copy-wasm.mjs"
+    "postinstall": "node scripts/copy-wasm.mjs",
+    "test": "node scripts/selftest.mjs"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^1.0.1",
