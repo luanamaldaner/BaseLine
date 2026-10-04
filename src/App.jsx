@@ -49,7 +49,7 @@ export default function App() {
   if (s.profile === undefined) return <Splash text={s.error ?? 'Loading your account…'} retry={!!s.error} />;
   if (s.profileConfirmed === false) return <Splash text={s.error ?? 'Loading your account…'} retry={!!s.error} />;
   if (!s.profile) return <ProfileSetup email={email} />;
-  if (!s.profile.consentedAt || !s.profile.ageConfirmedAt) return <ConsentScreen email={email} profile={s.profile} />;
+  if (!s.profile.consentedAt) return <ConsentScreen email={email} profile={s.profile} />;
   if (!teamIdsOf(s.profile).length) return <TeamSetup role={s.profile.role} email={email} />;
   if (s.teams.size < teamIdsOf(s.profile).length || !s.trialsReady) return <Splash text={s.error ?? 'Loading your teams…'} retry={!!s.error} />;
   return s.profile.role === 'coach' ? <CoachApp s={s} /> : <AthleteApp s={s} />;

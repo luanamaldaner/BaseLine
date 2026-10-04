@@ -110,40 +110,63 @@ test('team joins and leaves atomically maintain profile links and coach access p
   assert.equal(h.at('recordReaders/me/coach/t2'), true);
 });
 
-test('new consent requires an explicit age confirmation and records both timestamps once', async () => {
+test('new consent records only its timestamp once without requiring age confirmation', async () => {
   const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me' } } });
   await h.login();
-  await assert.rejects(h.api.recordConsent(), /13 or older/);
-  assert.equal(h.writes.length, 0);
-  await h.api.recordConsent({ ageConfirmed: true });
+  await h.api.recordConsent();
   const consentedAt = h.at('profiles/me/consentedAt');
   assert.match(consentedAt, /^\d{4}-\d{2}-\d{2}T/);
-  assert.equal(h.at('profiles/me/ageConfirmedAt'), consentedAt);
-  assert.deepEqual(Object.keys(h.writes[0].patch).sort(), ['ageConfirmedAt', 'consentedAt']);
-  await h.api.recordConsent({ ageConfirmed: true });
+  assert.equal(h.at('profiles/me/ageConfirmedAt'), null);
+  assert.deepEqual(Object.keys(h.writes[0].patch), ['consentedAt']);
+  await h.api.recordConsent();
   assert.equal(h.writes.length, 1);
   assert.equal(h.at('profiles/me/consentedAt'), consentedAt);
 });
 
-test('adding age confirmation preserves an existing immutable consent and all profile data', async () => {
+test('existing consent is unchanged when the profile has no age confirmation', async () => {
   const original = { ...athlete, consentedAt: '2026-10-01T12:00:00.000Z' };
   const h = setup({ '.info': { connected: true }, profiles: { me: original } });
   await h.login();
-  await h.api.recordConsent({ ageConfirmed: true });
-  assert.deepEqual(Object.keys(h.writes[0].patch), ['ageConfirmedAt']);
+  await h.api.recordConsent();
+  assert.equal(h.writes.length, 0);
   assert.equal(h.at('profiles/me/consentedAt'), original.consentedAt);
   assert.equal(h.at('profiles/me/name'), original.name);
   assert.deepEqual(h.at('profiles/me/teamIds'), original.teamIds);
-  assert.match(h.at('profiles/me/ageConfirmedAt'), /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(h.at('profiles/me/ageConfirmedAt'), null);
 });
 
-test('adding missing consent preserves an existing age confirmation', async () => {
+test('adding missing consent preserves a legacy age confirmation without rewriting it', async () => {
   const ageConfirmedAt = '2026-10-01T12:00:00.000Z';
   const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me', ageConfirmedAt } } });
   await h.login();
-  await h.api.recordConsent({ ageConfirmed: true });
+  await h.api.recordConsent();
   assert.deepEqual(Object.keys(h.writes[0].patch), ['consentedAt']);
   assert.equal(h.at('profiles/me/ageConfirmedAt'), ageConfirmedAt);
+});
+
+test('another device can confirm consent during the write without requiring a legacy age field', async () => {
+  const remoteTimestamp = '2026-10-02T12:00:00.000Z';
+  let h;
+  h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me' } } }, {
+    update: async (reference) => {
+      h.assign(`${reference.path}/consentedAt`, remoteTimestamp);
+      throw Object.assign(new Error('Permission denied'), { code: 'PERMISSION_DENIED' });
+    },
+  });
+  await h.login();
+  await h.api.recordConsent();
+  assert.equal(h.at('profiles/me/consentedAt'), remoteTimestamp);
+  assert.equal(h.at('profiles/me/ageConfirmedAt'), null);
+  assert.equal(h.writes.length, 0);
+});
+
+test('a rejected consent write is not mistaken for another device confirming it', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me' } } }, {
+    update: async () => { throw Object.assign(new Error('Permission denied'), { code: 'PERMISSION_DENIED' }); },
+  });
+  await h.login();
+  await assert.rejects(h.api.recordConsent(), (error) => error.code === 'PERMISSION_DENIED');
+  assert.equal(h.at('profiles/me/consentedAt'), null);
 });
 
 test('leave removes private team history, cutoff and avatar copies without deleting results', async () => {

@@ -9,11 +9,10 @@ export function PrivacyNotice() {
   return (
     <div className="privacy">
       <p className="muted small">Updated October 3, 2026</p>
-      <h3>For ages 13 and older</h3>
+      <h3>Notice for parents and guardians</h3>
       <p>
-        {APP_NAME} is not available to anyone under 13. If you are under 13, do not create an
-        account or use the app. If you are 13–17, a parent or guardian must read this notice and
-        agree before you use it. We record when you confirm your eligibility, not your date of birth.
+        If you’re under 18, a parent or guardian must read this notice and agree before you
+        use {APP_NAME}. Please review what the app saves and who can see it together.
       </p>
 
       <h3>A screening tool, not a diagnosis</h3>
@@ -25,7 +24,7 @@ export function PrivacyNotice() {
 
       <h3>What’s saved</h3>
       <ul>
-        <li>Your name, sign-in email, role, team memberships, and the dates of your consent and age confirmation.</li>
+        <li>Your name, sign-in email, role, team memberships, and the date of your consent. Older accounts may retain a previously recorded age-confirmation date; the app no longer requests it or collects a date of birth.</li>
         <li>Test scores, screening calls, baseline cutoffs, dates, who was tested, and who ran each test.</li>
         <li>Testing conditions, such as rest, pain, heat, a quiet or sideline setting, lighting, and device type.</li>
         <li>Medical history you enter: prior concussions, ADHD, vision, and vestibular or balance problems.</li>
@@ -81,14 +80,12 @@ export function PrivacyNotice() {
 // One-time agreement before using the app.
 export function ConsentScreen({ email, profile }) {
   const needsConsent = !profile?.consentedAt;
-  const needsAge = !profile?.ageConfirmedAt;
   const [screening, setScreening] = useState(false);
   const [data, setData] = useState(false);
-  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const busyRef = useRef(false);
-  const canContinue = (!needsConsent || (screening && data)) && (!needsAge || ageConfirmed);
+  const canContinue = !needsConsent || (screening && data);
 
   async function agree() {
     if (!canContinue || busyRef.current) return;
@@ -96,7 +93,7 @@ export function ConsentScreen({ email, profile }) {
     setBusy(true);
     setError(null);
     try {
-      await recordConsent({ ageConfirmed: !needsAge || ageConfirmed });
+      await recordConsent();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -112,10 +109,6 @@ export function ConsentScreen({ email, profile }) {
         <Brand className="gate-brand" />
         <h1>Before you start</h1>
         <PrivacyNotice />
-        {needsAge && <label className="check">
-          <input type="checkbox" checked={ageConfirmed} disabled={busy} onChange={(e) => setAgeConfirmed(e.target.checked)} />
-          <span>I am 13 or older. I understand that anyone under 13 cannot use this app.</span>
-        </label>}
         {needsConsent && <>
         <label className="check">
           <input type="checkbox" checked={screening} disabled={busy} onChange={(e) => setScreening(e.target.checked)} />
@@ -123,7 +116,7 @@ export function ConsentScreen({ email, profile }) {
         </label>
         <label className="check">
           <input type="checkbox" checked={data} disabled={busy} onChange={(e) => setData(e.target.checked)} />
-          <span>I agree to how my data is used above. If I’m 13–17, a parent or guardian has read this notice and agrees too.</span>
+          <span>I agree to how my data is used above. If I’m under 18, a parent or guardian has read this notice and agrees too.</span>
         </label>
         </>}
         {error && <div className="form-error" role="alert">{error}</div>}

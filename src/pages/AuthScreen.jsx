@@ -35,7 +35,6 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
-  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const busyRef = useRef(false);
 
   async function submit(e) {
@@ -43,10 +42,6 @@ export default function AuthScreen() {
     setError(null);
     setNotice(null);
     if (busyRef.current) return;
-    if (mode === 'signup' && !ageConfirmed) {
-      setError('You must confirm that you are 13 or older to create an account. Anyone under 13 cannot use this app.');
-      return;
-    }
     busyRef.current = true;
     setBusy(true);
     try {
@@ -68,7 +63,6 @@ export default function AuthScreen() {
     setMode(m);
     setError(null);
     setNotice(null);
-    setAgeConfirmed(false);
   };
 
   const title = { login: 'Log in', signup: 'Create an account', reset: 'Reset password' }[mode];
@@ -111,16 +105,10 @@ export default function AuthScreen() {
             required
           />
         )}
-        {mode === 'signup' && <>
-          <p className="muted small">Baseline is for ages 13 and older. If you are under 13, do not create an account or use the app. If you are 13–17, a parent or guardian must read the privacy notice and agree before you use it.</p>
-          <label className="check">
-            <input type="checkbox" required checked={ageConfirmed} disabled={busy} onChange={(e) => setAgeConfirmed(e.target.checked)} />
-            <span>I am 13 or older.</span>
-          </label>
-        </>}
+        {mode === 'signup' && <p className="muted small">If you’re under 18, a parent or guardian must read the privacy notice and agree before you use Baseline.</p>}
         {error && <div className="form-error" role="alert">{error}</div>}
         {notice && <div className="form-notice">{notice}</div>}
-        <button className="primary" type="submit" disabled={busy || (mode === 'signup' && !ageConfirmed)}>
+        <button className="primary" type="submit" disabled={busy}>
           {busy ? 'One moment…' : title}
         </button>
         <div className="auth-links small">

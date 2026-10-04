@@ -211,25 +211,23 @@ onAuthStateChanged(auth, (user) => {
 if (import.meta.env.DEV) window.__previewSession = (patch) => setState({ profileConfirmed: true, ...patch });
 
 export const logOut = () => signOut(auth);
-export async function recordConsent({ ageConfirmed = false } = {}) {
+export async function recordConsent() {
   requireConnection();
   const owner = uid(), profileRef = r(`profiles/${owner}`);
   const profile = (await confirmed(get(profileRef))).val();
   if (uid() !== owner) throw new Error('Your account changed. Sign in again before continuing.');
   if (!profile) throw new Error('Your profile is still loading. Try again.');
-  if (!profile.ageConfirmedAt && !ageConfirmed) throw new Error('Confirm that you are 13 or older before continuing. Anyone under 13 cannot use this app.');
   const timestamp = now(), patch = {};
   if (!profile.consentedAt) patch.consentedAt = timestamp;
-  if (!profile.ageConfirmedAt) patch.ageConfirmedAt = timestamp;
   if (!Object.keys(patch).length) return;
   try {
     await confirmed(update(profileRef, patch));
   } catch (error) {
-    // Another signed-in device can confirm the same immutable fields between
+    // Another signed-in device can confirm the same immutable field between
     // our read and update. Its confirmation is sufficient; never replace it.
     if (!String(error.code).toLowerCase().replaceAll('_', '-').includes('permission-denied')) throw error;
     const current = (await confirmed(get(profileRef))).val();
-    if (!current?.consentedAt || !current?.ageConfirmedAt) throw error;
+    if (!current?.consentedAt) throw error;
   }
 }
 export async function createProfile(role, name) {
