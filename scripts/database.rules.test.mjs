@@ -231,7 +231,10 @@ test('ranges allow authorized bounded cutoffs but cannot carry private or arbitr
 
 test('avatars are team-visible, owner-edited, bounded JPEG photos or known Dot presets', async () => {
   const user = client('a');
-  await user.put('avatars/t1/a', { kind: 'dot', dot: 'grape', updatedAt: at });
+  for (const dot of ['yellow', 'green', 'blue', 'pink', 'purple', 'red', 'sunny', 'mint', 'sky', 'berry', 'grape', 'tangerine']) {
+    await user.put('avatars/t1/a', { kind: 'dot', dot, updatedAt: at });
+    assert.equal((await client('b').read('avatars/t1/a')).val().dot, dot);
+  }
   await user.put('avatars/t1/a', { kind: 'photo', photo: 'data:image/jpeg;base64,AAAA', updatedAt: at });
   await user.put('avatars/t1/a', { kind: 'none', updatedAt: at });
   await client('c').put('avatars/t1/c', { kind: 'dot', dot: 'sunny', updatedAt: at });

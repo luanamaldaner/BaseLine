@@ -217,7 +217,7 @@ export async function recordConsent({ ageConfirmed = false } = {}) {
   const profile = (await confirmed(get(profileRef))).val();
   if (uid() !== owner) throw new Error('Your account changed. Sign in again before continuing.');
   if (!profile) throw new Error('Your profile is still loading. Try again.');
-  if (!profile.ageConfirmedAt && !ageConfirmed) throw new Error('Confirm that you are 14 or older before continuing.');
+  if (!profile.ageConfirmedAt && !ageConfirmed) throw new Error('Confirm that you are 13 or older before continuing. Anyone under 13 cannot use this app.');
   const timestamp = now(), patch = {};
   if (!profile.consentedAt) patch.consentedAt = timestamp;
   if (!profile.ageConfirmedAt) patch.ageConfirmedAt = timestamp;
@@ -360,15 +360,21 @@ function mergeLocalAvatar(avatars, me) {
   if (!local || (avatars.get(me)?.updatedAt ?? '') >= local.updatedAt) return;
   if (local.kind === 'none') avatars.delete(me); else avatars.set(me, local);
 }
-export function saveAvatar(avatar) {
+export async function saveAvatar(avatar) {
+  requireConnection();
+  const currentGeneration = generation;
   const me = uid(), record = avatar ? { ...avatar, updatedAt: now() } : { kind: 'none', updatedAt: now() };
-  try { localStorage.setItem(localAvatarKey(me), JSON.stringify(record)); } catch { /* device storage unavailable */ }
-  const avatars = new Map(state.avatars);
-  if (avatar) avatars.set(me, record); else avatars.delete(me);
-  setState({ avatars });
   const patch = {};
   // Preserve the removal's timestamp so another device's older local avatar
   // cannot override the change when it receives the live update.
   for (const team of teamIdsOf(state.profile)) patch[`avatars/${team}/${me}`] = record;
-  return confirmed(update(r(), patch));
+  if (!Object.keys(patch).length) throw new Error('Join or create a team before saving your profile picture.');
+  // Wait for the actual acknowledgement. A timed-out update can still commit
+  // later, which would make Cancel after an apparent failure misleading.
+  await update(r(), patch);
+  if (currentGeneration !== generation || auth.currentUser?.uid !== me) return;
+  try { localStorage.setItem(localAvatarKey(me), JSON.stringify(record)); } catch { /* Already saved in the account; local caching is optional. */ }
+  const avatars = new Map(state.avatars);
+  if (avatar) avatars.set(me, record); else avatars.delete(me);
+  setState({ avatars });
 }

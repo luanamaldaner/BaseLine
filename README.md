@@ -38,7 +38,7 @@ Coaches create and manage up to ten teams. Athletes can join up to ten teams wit
 | Run a post-hit check | Self or anyone on any shared team | Any athlete on any coached team |
 | View saved scores, trends, and history | Own results only | Full records of athletes on coached teams |
 | Delete results | Own results | Results of athletes whose profile grants access |
-| Medical history (prior concussions, ADHD, vision, balance problems) | Enter and edit their own across all teams | See each athlete?s, beside their results |
+| Medical history (prior concussions, ADHD, vision, balance problems) | Enter and edit their own across all teams | See each athlete’s, beside their results |
 | Manage membership | Join or leave individual teams | Create teams, invite or remove athletes per team |
 
 Coach Home combines all athletes, flagged first, with team tags and a team filter. The Team tab has a separate roster and invite card for every team. The check picker groups athletes by team; someone on multiple teams may appear in multiple groups, but still has only one result record.
@@ -49,7 +49,11 @@ A teammate running a check sees **only the call and action, never the athlete's 
 
 Coaches receive in-app alerts for checks run by others that return Monitor, Refer, or No baseline. Optional browser notifications work while the app is open, including in a background tab.
 
-A consent screen explains screening limits and data use before first use, records `consentedAt`, and asks for parent or guardian agreement for users under 18. Signup and onboarding require users to confirm they are **14 or older**; onboarding records `ageConfirmedAt` without collecting a birth date. This is a user attestation, not identity-based age verification. Both timestamps are immutable. The privacy notice remains accessible from the footer. Only final scores are saved: **no video or raw sensor recordings are uploaded**. Leaving or removing an athlete does not delete their results; full account deletion is not a self-service feature.
+A consent screen explains screening limits and data use before first use and records `consentedAt`. **The app is for ages 13 and older; anyone under 13 must not create an account or use it.** Users aged 13–17 must have a parent or guardian read the notice and agree before use. Signup and onboarding require explicit age confirmation; onboarding records `ageConfirmedAt` without collecting a birth date. This is a user attestation, not identity-based age verification. Both timestamps are immutable; an earlier confirmation of age 14+ still satisfies the current 13+ requirement. The privacy notice remains accessible from the footer.
+
+The notice covers account/profile information, team memberships, scores and screening calls, derived baseline cutoffs, entered testing conditions and medical history, optional profile pictures, and confirmation dates. **No raw camera video or motion recordings are uploaded**; an optional cropped profile photo is stored separately. Current coaches can access an athlete’s full saved result history across teams. The testing device handles the current measurement and may retain an upload queue even when the tester cannot browse that athlete’s saved record. Signed-in team lookups expose team metadata; authorized project administrators and Firebase service processing are separate from team-member permissions.
+
+Firebase Authentication manages sign-in and Realtime Database stores active shared records. Browsers retain sign-in state, preferences, durable IndexedDB upload queues, and possibly legacy Firestore caches. Signing out does not erase all stored browser data. Leaving a team removes its membership, history, avatar and cutoff copies, and revokes that coach’s result access unless another shared team remains; the athlete’s results are retained. Result deletion removes the active record, not automatically legacy database copies, administrative backups, exports, or previously retained device data. Full account deletion is not self-service: requests require the app administrator. See [Firebase privacy and security](https://firebase.google.com/support/privacy) for the provider’s processing information.
 
 ## How scoring works
 

@@ -8,6 +8,14 @@ import ThemeToggle from '../components/ThemeToggle.jsx';
 export function PrivacyNotice() {
   return (
     <div className="privacy">
+      <p className="muted small">Updated October 3, 2026</p>
+      <h3>For ages 13 and older</h3>
+      <p>
+        {APP_NAME} is not available to anyone under 13. If you are under 13, do not create an
+        account or use the app. If you are 13–17, a parent or guardian must read this notice and
+        agree before you use it. We record when you confirm your eligibility, not your date of birth.
+      </p>
+
       <h3>A screening tool, not a diagnosis</h3>
       <p>
         {APP_NAME} compares an athlete to their own healthy baseline and flags changes. It can’t
@@ -17,36 +25,55 @@ export function PrivacyNotice() {
 
       <h3>What’s saved</h3>
       <ul>
-        <li>Your name, email (for logging in), and team.</li>
-        <li>The date you confirm that you are 14 or older. We do not collect your date of birth.</li>
-        <li>Test results: scores like sway, reaction time, and eye-tracking numbers, with the date and who ran the test.</li>
+        <li>Your name, sign-in email, role, team memberships, and the dates of your consent and age confirmation.</li>
+        <li>Test scores, screening calls, baseline cutoffs, dates, who was tested, and who ran each test.</li>
+        <li>Testing conditions, such as rest, pain, heat, a quiet or sideline setting, lighting, and device type.</li>
+        <li>Medical history you enter: prior concussions, ADHD, vision, and vestibular or balance problems.</li>
+        <li>Your optional profile photo or Dot picture. Uploaded photos are cropped and resized.</li>
         <li>
-          <b>No video or sensor recordings.</b> The camera and motion sensor are processed on the
-          phone or laptop running the test; only the final scores are saved.
+          <b>No raw camera video or motion recordings are uploaded.</b> Test measurements are
+          processed on the testing device; the app saves the resulting scores. An optional
+          profile photo is a separate uploaded image.
         </li>
       </ul>
 
       <h3>Who sees it</h3>
       <ul>
         <li><b>You</b> see all of your own results.</li>
-        <li><b>Your coach</b> sees results for everyone on the team.</li>
+        <li><b>Coaches of your current teams</b> can read and delete your full saved result history, including results from other teams, and see the medical history shared with their team.</li>
         <li>
-          <b>A teammate who tests you</b> sees only the call (for example “Remove from play”),
-          never your numbers. To make that call, teammates’ phones receive your baseline cutoffs,
-          not your results.
+          <b>Teammates</b> can see team rosters, profile pictures, and derived baseline cutoffs.
+          A teammate testing you sees the screening call in the results screen and cannot browse
+          your saved record. Their device still processes your current measurement and may keep
+          a queued result locally while uploading it.
         </li>
-        <li>Nobody outside your team can see your data.</li>
+        <li>Signed-in users who look up a team can see its name, coach, and invitation details.</li>
+        <li>Authorized project administrators can access cloud data. Google Firebase processes data to provide the app’s sign-in, hosting, and database services.</li>
       </ul>
 
-      <h3>Deleting</h3>
+      <h3>Cloud and device storage</h3>
       <p>
-        You can delete any of your own results, and your coach can delete any result on the team.
-        Leaving a team stops you from using it; to delete your account entirely, ask your coach or
-        the app’s team.
+        Firebase Authentication manages sign-in; Firebase Realtime Database stores the active
+        shared records. Your browser keeps sign-in state, preferences, and a durable queue of
+        results awaiting upload, including checks you run on teammates. Older database caches
+        may remain on previously used devices. Signing out does not erase all local data;
+        clearing browser data can lose results that have not finished syncing.
       </p>
+      <p>See Firebase’s <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noreferrer">privacy and security information</a> for its processing of technical service data.</p>
 
-      <h3>Age requirement</h3>
-      <p>You must be 14 or older to use {APP_NAME}. If you’re under 18, a parent or guardian must read this and agree before you use the app.</p>
+      <h3>Leaving a team and deleting data</h3>
+      <p>
+        Leaving or being removed from a team removes that membership and its copies of your
+        medical history, picture, and cutoffs. It stops that coach’s future access to your saved
+        results unless you still share another team with them. Your own results remain saved.
+      </p>
+      <p>
+        You can delete your own results; authorized coaches can also delete them. This removes
+        the active result, but does not automatically erase legacy database copies, administrative
+        backups, exports, or data already retained on other devices. Full account deletion is not
+        available in the app. Ask the app administrator about account and stored-copy deletion;
+        your coach can help you reach them.
+      </p>
     </div>
   );
 }
@@ -87,7 +114,7 @@ export function ConsentScreen({ email, profile }) {
         <PrivacyNotice />
         {needsAge && <label className="check">
           <input type="checkbox" checked={ageConfirmed} disabled={busy} onChange={(e) => setAgeConfirmed(e.target.checked)} />
-          <span>I am 14 or older.</span>
+          <span>I am 13 or older. I understand that anyone under 13 cannot use this app.</span>
         </label>}
         {needsConsent && <>
         <label className="check">
@@ -96,7 +123,7 @@ export function ConsentScreen({ email, profile }) {
         </label>
         <label className="check">
           <input type="checkbox" checked={data} disabled={busy} onChange={(e) => setData(e.target.checked)} />
-          <span>I agree to how my data is used above. If I’m under 18, a parent or guardian agrees too.</span>
+          <span>I agree to how my data is used above. If I’m 13–17, a parent or guardian has read this notice and agrees too.</span>
         </label>
         </>}
         {error && <div className="form-error" role="alert">{error}</div>}

@@ -28,8 +28,9 @@ async function renderComponent(file, name, globals = {}) {
 const nodes = (tree) => typeof tree === 'object' ? [tree, ...(tree.children ?? []).flatMap(nodes)] : [];
 const find = (tree, predicate) => nodes(tree).find(predicate);
 const checkboxes = (tree) => nodes(tree).filter((node) => node.type === 'input' && node.props.type === 'checkbox');
+const visibleText = (tree) => typeof tree === 'string' ? tree : typeof tree === 'object' ? (tree.children ?? []).map(visibleText).join(' ') : '';
 
-test('signup cannot create an account until the user explicitly confirms 14 or older', async () => {
+test('signup requires an explicit 13-or-older confirmation and rejects bypassing the disabled button', async () => {
   let created = 0;
   const render = await renderComponent('AuthScreen.jsx', 'AuthScreen', {
     pendingInvite: () => 'ABCDEF',
@@ -38,6 +39,9 @@ test('signup cannot create an account until the user explicitly confirms 14 or o
     sendPasswordResetEmail: async () => {},
   });
   let tree = render();
+  assert.match(visibleText(tree), /I am 13 or older/);
+  assert.match(visibleText(tree), /under 13, do not create an account/);
+  assert.doesNotMatch(visibleText(tree), /14 or older/);
   assert.equal(checkboxes(tree)[0].props.checked, false);
   assert.equal(find(tree, (node) => node.props.type === 'submit').props.disabled, true);
   await find(tree, (node) => node.type === 'form').props.onSubmit({ preventDefault() {} });
@@ -74,6 +78,8 @@ test('new profiles require age, screening and data confirmations before saving c
     recordConsent: async () => { confirmations++; }, logOut: async () => {},
   });
   let tree = render({ profile: {} });
+  assert.match(visibleText(tree), /I am 13 or older/);
+  assert.match(visibleText(tree), /13–17, a parent or guardian has read this notice/);
   assert.equal(checkboxes(tree).length, 3);
   checkboxes(tree)[0].props.onChange({ target: { checked: true } });
   tree = render({ profile: {} });
@@ -83,4 +89,21 @@ test('new profiles require age, screening and data confirmations before saving c
   tree = render({ profile: {} });
   await find(tree, (node) => node.props.className === 'primary').props.onClick();
   assert.equal(confirmations, 1);
+});
+
+test('an existing earlier age confirmation needs no replacement and no birth date is collected', async () => {
+  const render = await renderComponent('Privacy.jsx', 'ConsentScreen', { recordConsent: async () => {}, logOut: async () => {} });
+  const tree = render({ profile: { consentedAt: '2026-10-01T12:00:00Z', ageConfirmedAt: '2026-10-01T12:00:00Z' } });
+  assert.equal(checkboxes(tree).length, 0);
+  assert.equal(nodes(tree).some((node) => node.type === 'input' && node.props.type === 'date'), false);
+});
+
+test('privacy notice describes current storage, access and deletion limits without absolute secrecy promises', async () => {
+  const render = await renderComponent('Privacy.jsx', 'PrivacyNotice');
+  const tree = render(), text = visibleText(tree);
+  for (const phrase of ['under 13', '13–17', 'Realtime Database', 'durable queue', 'medical history', 'profile photo', 'baseline cutoffs', 'Authorized project administrators', 'legacy database copies', 'administrative backups']) {
+    assert.ok(text.includes(phrase), `The notice should explain ${phrase}.`);
+  }
+  assert.doesNotMatch(text, /Nobody outside your team|never your numbers|14 or older/);
+  assert.ok(find(tree, (node) => node.type === 'a' && node.props.href === 'https://firebase.google.com/support/privacy'));
 });

@@ -737,6 +737,7 @@ button.brand-btn:active:not(:disabled) { transform: none; box-shadow: none; }
 }
 .modal {
   width: min(1000px, 100%); max-height: calc(100vh - 32px); overflow: auto;
+  max-height: calc(100dvh - 32px); overscroll-behavior: contain;
   background: var(--bg); border-radius: var(--radius-lg); box-shadow: var(--shadow-lift);
   padding: clamp(1rem, 3vw, 1.75rem); display: grid; gap: 1rem; outline: none;
 }
@@ -885,6 +886,7 @@ label.check { min-height: 44px; }
 }
 .dialog {
   width: 100%; max-width: 600px; max-height: min(85vh, 85dvh); overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg);
   padding: clamp(1rem, 4vw, 1.5rem);
 }
@@ -1398,16 +1400,29 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
 button.avatar-btn { padding: 0; min-height: 0; border-radius: 50%; border: none; box-shadow: none; display: inline-grid; }
 button.avatar-btn:hover:not(:disabled) { filter: brightness(1.05); background: none; }
 button.avatar-btn .avatar { width: 34px; height: 34px; }
-.profile-modal { width: min(560px, 100%); }
-.pfp-current { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; }
+.profile-modal { width: min(560px, 100%); display: flex; flex-direction: column; overflow: hidden; }
+.profile-modal > .modal-head, .pfp-footer { flex: none; }
+.pfp-content { display: grid; gap: 1rem; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 2px 4px 4px; }
+.pfp-current { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 1rem; }
+.pfp-preview { display: grid; justify-items: center; gap: 0.35rem; }
+.pfp-preview > .avatar { width: 96px; height: 96px; }
+.pfp-preview p { margin: 0; }
 .pfp-actions { display: grid; gap: 0.5rem; justify-items: start; }
+.pfp-actions button { min-height: 44px; max-width: 100%; white-space: normal; line-height: 1.3; }
 .pfp-sub { margin: 0.25rem 0 0; font-size: calc(1rem * var(--text-scale)); }
-.pfp-dots { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 0.6rem; }
+.pfp-dots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.6rem; }
 .pfp-dot {
   display: grid; justify-items: center; gap: 0.25rem; padding: 0.6rem 0.4rem; border-radius: 18px;
   background: var(--surface); border: 1.5px solid var(--border); box-shadow: 0 3px 0 0 var(--border-strong);
 }
 .pfp-dot.on { border-color: var(--accent); box-shadow: 0 3px 0 0 var(--accent-depth); }
+.pfp-footer { justify-content: flex-end; gap: 0.75rem; margin: 0; padding-top: 1rem; border-top: 1px solid var(--border); }
+.pfp-footer button { min-height: 44px; }
+@media (max-width: 380px) {
+  .pfp-actions { justify-items: stretch; }
+  .pfp-actions button { padding-inline: 0.65rem; }
+  .pfp-footer button { flex: 1; }
+}
 
 
 /* ---------- Phone: compact tour card and tidy header buttons ---------- */

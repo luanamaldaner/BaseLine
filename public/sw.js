@@ -4,10 +4,10 @@
 //     to the last copy when offline.
 //   - Built files, the face model, wasm, icons: cache first (names change
 //     when contents change, except model/wasm, versioned by CACHE below).
-const CACHE = 'baseline-v3-dot';
+const CACHE = 'baseline-v4';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest?v=dot-1', '/icon.svg?v=dot-1'])));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest?v=baseline-2', '/icon.svg?v=baseline-2'])));
   self.skipWaiting();
 });
 

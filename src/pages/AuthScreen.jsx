@@ -44,7 +44,7 @@ export default function AuthScreen() {
     setNotice(null);
     if (busyRef.current) return;
     if (mode === 'signup' && !ageConfirmed) {
-      setError('You must confirm that you are 14 or older to create an account.');
+      setError('You must confirm that you are 13 or older to create an account. Anyone under 13 cannot use this app.');
       return;
     }
     busyRef.current = true;
@@ -112,10 +112,10 @@ export default function AuthScreen() {
           />
         )}
         {mode === 'signup' && <>
-          <p className="muted small">You must be 14 or older to use Baseline. If you’re under 18, a parent or guardian must agree before you use the app.</p>
+          <p className="muted small">Baseline is for ages 13 and older. If you are under 13, do not create an account or use the app. If you are 13–17, a parent or guardian must read the privacy notice and agree before you use it.</p>
           <label className="check">
             <input type="checkbox" required checked={ageConfirmed} disabled={busy} onChange={(e) => setAgeConfirmed(e.target.checked)} />
-            <span>I am 14 or older.</span>
+            <span>I am 13 or older.</span>
           </label>
         </>}
         {error && <div className="form-error" role="alert">{error}</div>}

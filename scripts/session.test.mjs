@@ -59,6 +59,7 @@ function setup(initial = {}, options = {}) {
     get: async (reference) => { reads.push(reference.path); return snap(reference.path); },
     writeValue: write, remove: (reference) => write(reference, null),
     update: async (reference, patch) => {
+      if (options.update) await options.update(reference, patch);
       writes.push({ path: reference.path, patch: plain(patch) });
       const paths = Object.entries(patch).map(([key, value]) => { const path = [reference.path, key].filter(Boolean).join('/'); assign(path, value); return path; });
       for (const path of paths) notify(path);
@@ -93,7 +94,7 @@ function setup(initial = {}, options = {}) {
     if (value) for (const path of streams.keys()) if (path !== '.info/connected') emit(path);
   };
   const fail = (path, error) => { for (const entry of streams.get(path) ?? []) if (entry.active) entry.error?.(error); };
-  return { api: context.api, data, at, assign, emit, fail, streams, writes, reads, timers, queues, login, auth, setConnection };
+  return { api: context.api, data, at, assign, emit, fail, streams, writes, reads, timers, queues, login, auth, setConnection, local };
 }
 
 test('team joins and leaves atomically maintain profile links and coach access per shared team', async () => {
@@ -112,7 +113,7 @@ test('team joins and leaves atomically maintain profile links and coach access p
 test('new consent requires an explicit age confirmation and records both timestamps once', async () => {
   const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me' } } });
   await h.login();
-  await assert.rejects(h.api.recordConsent(), /14 or older/);
+  await assert.rejects(h.api.recordConsent(), /13 or older/);
   assert.equal(h.writes.length, 0);
   await h.api.recordConsent({ ageConfirmed: true });
   const consentedAt = h.at('profiles/me/consentedAt');
@@ -300,4 +301,40 @@ test('removing an avatar on desktop overrides the phone’s older locally cached
   await desktop.api.saveAvatar(null);
   assert.equal(phone.api.getSession().avatars.get('me')?.kind, 'none');
   assert.equal(server.data.avatars.t1.me.kind, 'none');
+});
+
+test('profile picture caching changes only after remote acknowledgement', async () => {
+  let acknowledge;
+  const original = { kind: 'dot', dot: 'yellow', updatedAt: '2026-10-01T12:00:00Z' };
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } }, avatars: { t1: { me: original } } }, {
+    update: () => new Promise((resolve) => { acknowledge = resolve; }),
+  });
+  await h.login();
+  h.local.set('avatar:me', JSON.stringify(original));
+  const saving = h.api.saveAvatar({ kind: 'dot', dot: 'blue' });
+  await flush();
+  assert.equal(h.api.getSession().avatars.get('me').dot, 'yellow');
+  assert.equal(JSON.parse(h.local.get('avatar:me')).dot, 'yellow');
+  assert.equal(h.at('avatars/t1/me/dot'), 'yellow');
+  acknowledge();
+  await saving;
+  assert.equal(h.api.getSession().avatars.get('me').dot, 'blue');
+  assert.equal(JSON.parse(h.local.get('avatar:me')).dot, 'blue');
+  assert.equal(h.at('avatars/t1/me/dot'), 'blue');
+});
+
+test('rejected and offline avatar saves preserve the previous avatar and cache', async () => {
+  const original = { kind: 'dot', dot: 'yellow', updatedAt: '2026-10-01T12:00:00Z' };
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } }, avatars: { t1: { me: original } } }, {
+    update: async () => { throw Object.assign(new Error('Permission denied'), { code: 'PERMISSION_DENIED' }); },
+  });
+  await h.login();
+  h.local.set('avatar:me', JSON.stringify(original));
+  await assert.rejects(h.api.saveAvatar({ kind: 'dot', dot: 'red' }), /Permission denied/);
+  assert.equal(h.api.getSession().avatars.get('me').dot, 'yellow');
+  assert.equal(JSON.parse(h.local.get('avatar:me')).dot, 'yellow');
+  assert.equal(h.at('avatars/t1/me/dot'), 'yellow');
+  h.setConnection(false);
+  await assert.rejects(h.api.saveAvatar(null), /Connect to the internet/);
+  assert.equal(JSON.parse(h.local.get('avatar:me')).dot, 'yellow');
 });
