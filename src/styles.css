@@ -169,6 +169,9 @@ input[type="checkbox"], input[type="radio"] {
 .header-actions { grid-area: actions; display: flex; align-items: center; gap: 0.25rem; }
 .header-actions > button { flex: none; min-height: 44px; white-space: nowrap; }
 .header-actions .theme-toggle { min-width: 44px; }
+.merch-header-link { display: inline-flex; align-items: center; gap: 0.28rem; min-height: 38px; padding: 0.35rem 0.7rem; border: 1px solid var(--accent); border-radius: 999px; background: var(--accent-dim); color: var(--accent-ink); font-size: calc(0.82rem * var(--text-scale)); font-weight: 800; letter-spacing: 0.01em; text-decoration: none; white-space: nowrap; box-shadow: 0 2px 0 var(--accent-depth); }
+.merch-header-link:hover { background: var(--accent); color: var(--accent-contrast); }
+.merch-header-link:active { transform: translateY(2px); box-shadow: none; }
 @media (max-width: 900px) {
   .topbar { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'brand actions' 'team account'; gap: 0.5rem 0.75rem; }
   .account-name { max-width: 14rem; justify-self: end; }
@@ -1159,6 +1162,8 @@ button, a, label, input, select, textarea, summary { touch-action: manipulation;
   .topbar .account-name { max-width: 10rem; }
   .topbar .account-name b { font-weight: 600; color: var(--muted); font-size: calc(0.9rem * var(--text-scale)); }
   .header-actions { gap: 2px; }
+  .merch-header-link { width: 38px; min-height: 38px; justify-content: center; padding: 0; font-size: 0; }
+  .merch-header-link > span { font-size: calc(0.92rem * var(--text-scale)); }
   .header-actions .tutorial-btn { width: 44px; padding: 0; justify-content: center; }
   .header-actions .tutorial-label { display: none; }
   .header-actions .logout-btn { padding-inline: 0.55rem; }

@@ -16,6 +16,7 @@ import { baselineConcerns } from '../lib/validity.js';
 import DotEmoji from '../components/DotEmoji.jsx';
 import ResultSaveStatus from '../components/ResultSaveStatus.jsx';
 import { serviceErrorMessage } from '../lib/serviceErrors.js';
+import MeasurementIssue, { VISION_CORRECTION_GUIDANCE } from '../tests/eye/MeasurementIssue.jsx';
 
 // The three objective tests, one after the other, for an athlete who may be
 // young or concussed: one instruction per screen, every instruction spoken,
@@ -49,7 +50,7 @@ const STEPS = [
       'Look at each dot until it moves.',
       'Then follow the moving dot with your eyes only.',
     ],
-    examiner: 'Face toward the light, an arm’s length from the screen. Glasses off if they can.',
+    examiner: `Face toward the light, an arm’s length from the screen. ${VISION_CORRECTION_GUIDANCE}`,
     spoken: 'Keep your head still. Look at each dot. Then follow the moving dot with just your eyes.',
     autoSpeak: false,
   },
@@ -89,6 +90,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
   const [startSignal, setStartSignal] = useState(0);
   const [results, setResults] = useState({});
   const [failure, setFailure] = useState(null);
+  const [repeatFromSummary, setRepeatFromSummary] = useState(false);
   const [readAloud, setReadAloud] = useState(false); // speaker button tapped on this ready screen
   // Taps arrive faster than React re-renders, so state alone can't stop a
   // double-tap from starting a test twice or skipping two tests at once.
@@ -125,6 +127,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
     advancedRef.current = -1;
     setStepIdx(0);
     setResults({});
+    setRepeatFromSummary(false);
     goReady();
   }
 
@@ -156,17 +159,36 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
 
   function finished(result) {
     if (result.aborted) return stop();
-    if (!result.ok) {
-      setFailure(result.reason);
+    if (!result.ok || result.status === 'unreliable' || !result.metrics) {
+      setFailure(result);
+      setResults({ ...results, [step.id]: result });
       setStage('failed');
       return;
     }
     const next = { ...results, [step.id]: result };
     setResults(next);
+    if (repeatFromSummary) {
+      setRepeatFromSummary(false);
+      setStage('summary');
+      return;
+    }
     advance(next);
   }
 
-  const skip = () => advance(results);
+  const skip = () => {
+    if (repeatFromSummary) {
+      setRepeatFromSummary(false);
+      setStage('summary');
+    } else advance(results);
+  };
+
+  function repeatEye() {
+    advancedRef.current = -1;
+    setStepIdx(STEPS.findIndex((entry) => entry.id === 'eye'));
+    setFailure(null);
+    setRepeatFromSummary(true);
+    goReady();
+  }
 
   function retry() {
     setFailure(null);
@@ -198,7 +220,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
 
   if (stage === 'summary') {
     return (
-      <Summary subject={subject} isSelf={isSelf} canSeeData={canSeeData} results={results} onDone={onDone} />
+      <Summary subject={subject} isSelf={isSelf} canSeeData={canSeeData} results={results} onDone={onDone} onRepeatEye={repeatEye} />
     );
   }
 
@@ -242,10 +264,12 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
 
       {stage === 'failed' && (
         <div className="flow-ready">
-          <div className="callout danger">That didn’t work: {failure}</div>
+          {failure?.status === 'unreliable'
+            ? <MeasurementIssue result={failure} onRepeat={retry} />
+            : <div className="callout danger">That didn’t work: {failure?.reason}</div>}
           <div className="row">
-            <button className="primary big-btn" onClick={retry}>Try again</button>
-            <button className="ghost" onClick={skip}>Skip this test</button>
+            {failure?.status !== 'unreliable' && <button className="primary big-btn" onClick={retry}>Try again</button>}
+            <button className="ghost" onClick={skip}>{failure?.status === 'unreliable' ? 'Continue without an eye result' : 'Skip this test'}</button>
             <button className="ghost" onClick={onDone}>Stop everything</button>
           </div>
         </div>
@@ -274,7 +298,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
 // For whoever ran it, not the athlete mid-test: one overall call, then each
 // test. Numbers only for people allowed to see them (the athlete themselves
 // and the coach); a teammate running a check sees only what to do.
-function Summary({ subject, isSelf, canSeeData, results, onDone }) {
+export function Summary({ subject, isSelf, canSeeData, results, onDone, onRepeatEye }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [concerns, setConcerns] = useState(null); // why these baselines look off, before saving
@@ -284,7 +308,8 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
   const queuedRef = useRef({ kind: null, byTest: {} });
   const busyRef = useRef(false);
 
-  const done = STEPS.filter((s) => results[s.id]?.ok);
+  const done = STEPS.filter((s) => results[s.id]?.ok && results[s.id]?.status !== 'unreliable' && results[s.id]?.metrics);
+  const hasUnreliable = STEPS.some((s) => results[s.id]?.status === 'unreliable');
   // The id results are stored and scored under: the eye test reports 'eye'
   // (laptop) or 'eyePhone', since each device keeps its own baseline.
   const tid = (s) => results[s.id]?.testId ?? s.id;
@@ -359,13 +384,18 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
 
   return (
     <section className="flow">
-      <h2>All done</h2>
+      <h2>{hasUnreliable ? 'Completed results — eye capture needs repeating' : 'All done'}</h2>
 
-      {status ? (
+      {status && !(hasUnreliable && overall === 'normal') ? (
         <div className={`status-banner ${status.cls}`}>
           <span className="muted small">Overall, against {isSelf ? 'your' : `${subject.name}’s`} own baseline</span>
           <b>{status.title}</b>
           <span>{status.text}</span>
+        </div>
+      ) : hasUnreliable ? (
+        <div className="status-banner warn">
+          <b>Eye measurement unavailable</b>
+          <span>The eye capture was unreliable and is excluded from grading. Only completed, reliable tests can be saved below.</span>
         </div>
       ) : (
         <div className="status-banner muted">
@@ -418,7 +448,9 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
         return (
           <div className="flow-result" key={s.id}>
             <h3>{s.title}</h3>
-            {!r?.ok ? (
+            {r?.status === 'unreliable' ? (
+              <MeasurementIssue result={r} onRepeat={!saved && !progress ? onRepeatEye : undefined} />
+            ) : !r?.ok ? (
               <p className="muted">Skipped.</p>
             ) : (
               <>

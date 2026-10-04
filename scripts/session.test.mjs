@@ -231,6 +231,42 @@ test('teammate check saves privately under the subject and exposes no numerical 
   await assert.rejects(h.api.submitCheck('outsider', 'reaction', baseline.metrics), /shared team/);
 });
 
+test('incomplete or nonfinite eye captures cannot be saved as baselines or normal checks', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } });
+  await h.login();
+  const valid = { onTarget: 95, gain: 1, saccadeRate: 0.5, lagMs: 100 };
+  for (const testId of ['eye', 'eyePhone']) {
+    const invalid = [undefined, null, {}, Object.fromEntries(Object.keys(valid).map((key) => [key, null]))];
+    for (const key of Object.keys(valid)) {
+      for (const value of [undefined, null, NaN, Infinity]) invalid.push({ ...valid, [key]: value });
+    }
+    for (const metrics of invalid) {
+      assert.throws(() => h.api.saveBaseline(testId, metrics), /Measurement unreliable\. Repeat the eye test/);
+      await assert.rejects(h.api.submitCheck('me', testId, metrics), /Measurement unreliable\. Repeat the eye test/);
+    }
+  }
+  assert.equal(h.writes.length, 0);
+  assert.equal(h.queues[0].jobs.size, 0);
+  assert.equal(h.api.getSession().trials.size, 0);
+});
+
+test('valid concerning eye checks retain their grade when vision history is present', async () => {
+  const baselineMetrics = { onTarget: 95, gain: 1, saccadeRate: 0.5, lagMs: 100 };
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } });
+  await h.login();
+  for (const testId of ['eye', 'eyePhone']) {
+    await h.api.saveBaseline(testId, baselineMetrics); await flush();
+    const metrics = { onTarget: 25, gain: 0.3, saccadeRate: 0.5, lagMs: 280 };
+    const first = await h.api.submitCheck('me', testId, metrics);
+    await h.api.saveHistory({ concussions: 0, adhd: false, vision: true, vestibular: false });
+    const withHistory = await h.api.submitCheck('me', testId, metrics);
+    assert.equal(first.status, 'refer');
+    assert.equal(withHistory.status, 'refer');
+    assert.equal(withHistory.comparison.status, 'refer');
+    assert.deepEqual(h.at(`trials/me/${withHistory.trialId}`).metrics, metrics);
+  }
+});
+
 test('creating an existing profile never overwrites its role or name', async () => {
   const original = { role: 'coach', name: 'Original' };
   const h = setup({ '.info': { connected: true }, profiles: { me: original } });

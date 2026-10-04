@@ -318,6 +318,11 @@ export function syncRanges(subject) {
   }
 }
 const clean = (metrics) => Object.fromEntries(Object.entries(metrics).map(([key, value]) => [key, Number.isFinite(value) ? value : null]));
+function requireEyeMetrics(test, metrics) {
+  if ((test === 'eye' || test === 'eyePhone') && Object.keys(SPECS[test]).some((key) => !Number.isFinite(metrics?.[key]))) {
+    throw new Error('Measurement unreliable. Repeat the eye test before saving a baseline or post-hit check.');
+  }
+}
 const withConditions = (trial, conditions) => conditions && Object.keys(conditions).length ? { ...trial, conditions } : trial;
 async function addTrial(trial) {
   const owner = uid(), queue = outbox;
@@ -327,9 +332,11 @@ async function addTrial(trial) {
   await queue.enqueue({ id, path: `trials/${trial.subjectUid}/${id}`, trial }); return { id, ...trial };
 }
 export function saveBaseline(test, metrics, conditions) {
+  requireEyeMetrics(test, metrics);
   return addTrial(withConditions({ subjectUid: uid(), testerUid: uid(), test, kind: 'baseline', at: now(), metrics: clean(metrics) }, conditions));
 }
 export async function submitCheck(subjectUid, test, metrics, conditions) {
+  requireEyeMetrics(test, metrics);
   const teamId = teamIdsOf(state.profile).find((id) => state.members.get(subjectUid)?.teamIds.includes(id));
   if (!teamId) throw new Error('This athlete is no longer on a shared team.');
   const m = clean(metrics), status = judge(state.ranges.get(`${subjectUid}_${test}`), m);

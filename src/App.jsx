@@ -194,6 +194,9 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
               <b>{s.profile.name}</b> <span className="muted small">{s.profile.role}</span>
             </div>
             <div className="header-actions">
+              <a className="merch-header-link" href="/merch" title="Explore the Dot merchandise collection">
+                <span aria-hidden="true">✨</span> Dot merch
+              </a>
               <button className="ghost small-btn tutorial-btn" data-tour="tutorial" aria-label="Open tutorial" title="Open tutorial" onClick={() => setTouring(true)}>
                 <span className="tutorial-icon" aria-hidden>?</span><span className="tutorial-label">Tutorial</span>
               </button>

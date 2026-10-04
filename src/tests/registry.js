@@ -51,7 +51,7 @@ export const TESTS = [
     measures: 'How smoothly the eyes follow a moving dot.',
     system: 'Eye-movement control, closely linked to the inner ear',
     bestAt: 'Visual problems behind complaints like blurry vision or trouble reading, which symptom lists can miss. Hard to fake.',
-    limits: 'A camera is noisier than a clinical eye tracker. Lighting, glasses, and head movement all affect it. Phone and laptop results are compared only to the same device.',
+    limits: 'A camera is noisier than a clinical eye tracker. Lighting, glare, and head movement can affect camera tracking. Phone and laptop results are compared only to the same device.',
   },
 ];
 

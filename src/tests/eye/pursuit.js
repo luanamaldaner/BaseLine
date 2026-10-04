@@ -1,5 +1,6 @@
 // Smooth-pursuit test: target motion, calibration fit, frame checks, metrics.
 // Positions are in screen widths (0 = left edge, 1 = right edge).
+import { calibrationIssue, captureQuality, unreliableMeasurement, temporalCoverage, MAX_SAMPLE_GAP_MS } from './quality.js';
 
 export const PURSUIT = {
   // Dot sweeps 0.2 -> 0.8 of screen width. Wider sweeps push the iris into
@@ -92,9 +93,12 @@ function median(xs) {
 // Fits screenX = a * eyeRatio + b by least squares on each point's median,
 // and records the head pose / eye difference to check later frames against.
 export function fitCalibration(points) {
-  const usable = points.filter((p) => p.samples.length >= CALIBRATION.minSamples);
+  const usable = points
+    .filter((p) => Number.isFinite(p.x))
+    .map((p) => ({ ...p, samples: p.samples.filter((s) => [s.h, s.yaw, s.eyeDiff].every(Number.isFinite)) }))
+    .filter((p) => p.samples.length >= CALIBRATION.minSamples);
   if (usable.length < 3) {
-    return { ok: false, reason: 'Face/eyes not detected on enough calibration points.' };
+    return unreliableMeasurement('Face/eyes not detected on enough calibration points.');
   }
   const pts = usable.map((p) => ({ x: p.x, h: median(p.samples.map((s) => s.h)) }));
   const all = usable.flatMap((p) => p.samples);
@@ -107,9 +111,9 @@ export function fitCalibration(points) {
     sxx += (p.h - mh) ** 2;
     syy += (p.x - mx) ** 2;
   }
-  if (sxx === 0) return { ok: false, reason: 'Eye position did not change between points.' };
+  if (sxx === 0) return unreliableMeasurement('Eye position did not change between points.');
   const a = sxy / sxx;
-  return {
+  const calib = {
     ok: true,
     a,
     b: mx - a * mh,
@@ -118,12 +122,15 @@ export function fitCalibration(points) {
     eyeDiff: median(all.map((s) => s.eyeDiff)),
     points: pts,
   };
+  const issue = calibrationIssue(calib);
+  return issue ? { ...calib, ...unreliableMeasurement(issue) } : calib;
 }
 
 // Why a frame can't be trusted, or null if it's fine.
 export function frameIssue(s, calib) {
   if (!s.face || !Number.isFinite(s.h)) return 'face';
   if (s.blink) return 'blink';
+  if (![s.yaw, s.eyeDiff].every(Number.isFinite)) return 'glitch';
   if (Math.abs(s.yaw - calib.yaw) > HEAD_TURN_LIMIT) return 'head';
   if (Math.abs(s.eyeDiff - calib.eyeDiff) > EYE_DIFF_LIMIT) return 'glitch';
   return null;
@@ -142,26 +149,31 @@ function despike(pts) {
 }
 
 // samples: [{ t (ms since motion start), h (eye ratio), issue (null if ok) }]
-export function computePursuit(samples, calib) {
-  const pts = samples.map((s) => ({
-    t: s.t,
-    target: targetX(s.t),
-    gaze: s.issue ? NaN : calib.a * s.h + calib.b,
-    valid: !s.issue,
-    issue: s.issue,
-    saccade: false,
-  }));
+export function computePursuit(samples, calib, { multiFacePct = 0 } = {}) {
+  const pts = samples.map((s) => {
+    const gaze = calib?.a * s.h + calib?.b;
+    const issue = s.issue || (!Number.isFinite(gaze) ? 'glitch' : null);
+    return {
+      t: s.t,
+      target: targetX(s.t),
+      gaze: issue ? NaN : gaze,
+      valid: !issue,
+      issue,
+      saccade: false,
+    };
+  });
   const clean = despike(pts);
   pts.forEach((p, i) => (p.gaze = clean[i]));
 
-  const analysed = pts.filter((p) => p.t >= PURSUIT.skipMs);
+  const analysed = pts.filter((p) => p.t >= PURSUIT.skipMs && p.t <= PURSUIT.moveMs);
   const use = analysed.filter((p) => p.valid);
   const validFraction = analysed.length ? use.length / analysed.length : 0;
   const issues = { face: 0, blink: 0, head: 0, glitch: 0 };
   for (const p of analysed) if (p.issue) issues[p.issue]++;
-  if (use.length < 30) {
-    return { ok: false, reason: 'Too few usable frames (face lost, eyes closed, or head turned).', validFraction, issues, trace: pts };
-  }
+  const coverageFraction = temporalCoverage(analysed, PURSUIT.skipMs, PURSUIT.moveMs);
+  const diagnostics = { validFraction, coverageFraction, issues, trace: pts };
+  const quality = captureQuality({ calib, totalFrames: analysed.length, usableFrames: use.length, issues, multiFacePct, coverageFraction });
+  if (!quality.ok) return { ...quality, ...diagnostics };
 
   // Lag: the delay that best lines the gaze trace up with the target, judged
   // by residual variance so a constant left/right offset doesn't bias it.
@@ -195,7 +207,7 @@ export function computePursuit(samples, calib) {
   for (let i = 1; i < analysed.length - 1; i++) {
     const p0 = analysed[i - 1], p = analysed[i], p2 = analysed[i + 1];
     const dt = (p2.t - p0.t) / 1000;
-    if (!p0.valid || !p.valid || !p2.valid || dt <= 0 || dt > 0.12) continue;
+    if (!p0.valid || !p.valid || !p2.valid || dt <= 0 || dt > MAX_SAMPLE_GAP_MS / 1000) continue;
     vel.push({ i, ev: (p2.gaze - p0.gaze) / dt, tv: targetVel(p.t - lagMs) });
   }
 
@@ -229,12 +241,19 @@ export function computePursuit(samples, calib) {
   const gain = den > 0 ? num / den : NaN;
 
   const seconds = (analysed[analysed.length - 1].t - analysed[0].t) / 1000;
+  const metrics = { onTarget, gain, saccadeRate: saccades / seconds, lagMs, trackingError };
+  // Sparse or stalled video can leave no consecutive samples for velocity.
+  // Never turn an unavailable metric into a normal (or worse) function score.
+  if (!Object.values(metrics).every(Number.isFinite)) {
+    return { ...unreliableMeasurement('The recording did not contain enough consecutive usable frames. Check the camera and repeat the test.'), ...diagnostics };
+  }
 
   return {
     ok: true,
-    metrics: { onTarget, gain, saccadeRate: saccades / seconds, lagMs, trackingError },
+    metrics,
     saccades,
     validFraction,
+    coverageFraction,
     issues,
     trace: pts,
   };

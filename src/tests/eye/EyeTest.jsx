@@ -10,6 +10,7 @@ import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx'
 import { say, hush, unlockAudio } from '../../lib/cues.js';
 import DotEmoji from '../../components/DotEmoji.jsx';
 import { CheckIcon, CloseIcon } from '../../components/Icons.jsx';
+import MeasurementIssue, { VISION_CORRECTION_GUIDANCE } from './MeasurementIssue.jsx';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -100,6 +101,7 @@ function EyeScan({
   const sinkRef = useRef(null); // receives samples during calibration/pursuit
   const phaseRef = useRef('preview');
   const abortRef = useRef(false);
+  const mountedRef = useRef(true);
 
   const [status, setStatus] = useState('loading'); // loading | ready | error
   const [error, setError] = useState(null);
@@ -127,6 +129,7 @@ function EyeScan({
 
   // Camera + model + tracking loop, alive for the life of the component.
   useEffect(() => {
+    mountedRef.current = true;
     let cancelled = false;
     let stream = null;
     let landmarker = null;
@@ -192,6 +195,13 @@ function EyeScan({
     })();
 
     return () => {
+      mountedRef.current = false;
+      abortRef.current = true;
+      sinkRef.current = null;
+      if (runningRef.current) {
+        hush();
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      }
       cancelled = true;
       stop?.();
       stream?.getTracks().forEach((t) => t.stop());
@@ -218,7 +228,7 @@ function EyeScan({
   };
 
   const checkAbort = () => {
-    if (abortRef.current) throw new Error('aborted');
+    if (abortRef.current || !mountedRef.current) throw new Error('aborted');
   };
 
   // Spoken instruction, then a 3-2-1 on screen. The athlete may be young or
@@ -239,14 +249,15 @@ function EyeScan({
 
   async function runTest() {
     // A second tap before the first render would run two tests over each other.
-    if (runningRef.current) return;
+    if (runningRef.current || !mountedRef.current) return;
     unlockAudio();
     // A second face means the tracker may follow the wrong person.
     if (lastSample.current?.faces > 1) {
       const reason = 'Two faces are in view. Ask anyone nearby to step out of the camera’s view, then try again.';
-      setResult({ ok: false, reason });
+      const failed = { ok: false, status: 'unreliable', reason, reasons: [reason], testId: test };
+      setResult(failed);
       setPhase('results');
-      if (guided) onFinished?.({ ok: false, reason });
+      if (guided && mountedRef.current) onFinished?.(failed);
       return;
     }
     runningRef.current = true;
@@ -316,35 +327,41 @@ function EyeScan({
       sinkRef.current = null;
       checkAbort();
 
-      const r = computePursuit(samples, calib);
       // Compare against the baseline as it stands, before this trial is saved.
       testingRef.current = false;
       const multiFacePct = env.current.frames ? (100 * env.current.multiFace) / env.current.frames : 0;
+      const r = computePursuit(samples, calib, { multiFacePct });
       setResult({ ...r, calib, multiFacePct });
       setPhase('results');
-      if (guided) onFinished?.({ ...r, calib, multiFacePct, testId: test });
+      if (guided && mountedRef.current) onFinished?.({ ...r, calib, multiFacePct, testId: test });
     } catch (e) {
       sinkRef.current = null;
       if (e.message === 'aborted') {
-        setPhase('preview');
-        if (guided) onFinished?.({ ok: false, aborted: true });
+        if (mountedRef.current) {
+          setPhase('preview');
+          if (guided) onFinished?.({ ok: false, aborted: true });
+        }
       } else {
-        setResult({ ok: false, reason: e.message });
-        setPhase('results');
-        if (guided) onFinished?.({ ok: false, reason: e.message });
+        const failed = { ok: false, status: 'unreliable', reason: e.message, reasons: [e.message], testId: test };
+        if (mountedRef.current) {
+          setResult(failed);
+          setPhase('results');
+          if (guided) onFinished?.(failed);
+        }
       }
     } finally {
       runningRef.current = false;
       testingRef.current = false;
-      setStageCount(null);
-      setDotCountdown(false);
-      hush();
-      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      if (mountedRef.current) {
+        setStageCount(null);
+        setDotCountdown(false);
+        hush();
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      }
     }
   }
 
   const testing = phase === 'calibrate' || phase === 'pursuit';
-  const quality = result?.ok ? qualityWarnings(result) : [];
 
   const content = (
     <section className="test">
@@ -377,7 +394,9 @@ function EyeScan({
 
         {onClose ? (
           <ScanGuide
+            key={phase === 'results' ? 'results' : 'setup'}
             live={live} ready={status === 'ready'} done={phase === 'results'} tips={tips}
+            unreliable={result?.status === 'unreliable' || (result && !result.ok)}
             onStart={runTest}
             readAloud={readAloud}
             onReadAloud={() => {
@@ -394,7 +413,7 @@ function EyeScan({
           {guided ? null : (<>
           <ul className="tips">
             <li>Face well lit, camera at eye level.</li>
-            <li>Remove glasses if you can.</li>
+            <li>{VISION_CORRECTION_GUIDANCE}</li>
             <li>Keep your head still; move only your eyes.</li>
             <li>Press Esc to stop a test.</li>
           </ul>
@@ -435,47 +454,9 @@ function EyeScan({
       )}
 
       {!guided && phase === 'results' && result && (
-        <div className="results">
-          {!result.ok ? (
-            <div className="callout danger">
-              Test didn't work: {result.reason} Check the setup panel and run it again.
-            </div>
-          ) : (
-            <>
-              {quality.length > 0 && (
-                <div className="callout warn">
-                  <b>Retest recommended.</b>
-                  {quality.map((q) => <div key={q}>{q}</div>)}
-                </div>
-              )}
-
-              <ResultPanel
-                key={runId}
-                subject={subject}
-                isSelf={isSelf}
-                canSeeData={canSeeData}
-                test={test}
-                metrics={result.metrics}
-                spec={METRICS}
-                onDiscard={() => { setResult(null); setPhase('preview'); }}
-              >
-              <div className="plot-wrap">
-                <h3>Eyes vs. dot</h3>
-                <p className="muted small">
-                  Gray is where the dot was; blue is where your eyes were. The closer the two
-                  lines, the better the tracking. Red dots mark catch-up jumps. Gaps are blinks or
-                  moments the tracker lost your eyes.
-                </p>
-                <TracePlot trace={result.trace} />
-              </div>
-              </ResultPanel>
-              <p className="muted small">
-                Calibration fit {(result.calib.r2 * 100).toFixed(0)}% · usable frames{' '}
-                {(result.validFraction * 100).toFixed(0)}%
-              </p>
-            </>
-          )}
-        </div>
+        <EyeResults result={result} runId={runId} subject={subject} isSelf={isSelf}
+          canSeeData={canSeeData} test={test} onRepeat={runTest}
+          onSetup={() => { setResult(null); setPhase('preview'); }} />
       )}
     </section>
   );
@@ -488,17 +469,27 @@ function EyeScan({
   );
 }
 
-function qualityWarnings(r) {
-  const out = [];
-  const total = r.trace.filter((p) => p.t >= PURSUIT.skipMs).length || 1;
-  const pct = (n) => Math.round((100 * n) / total);
-  if (r.calib.r2 < 0.85) out.push('Calibration was shaky. Keep your head still and look right at each dot.');
-  if (pct(r.issues.head) > 10) out.push(`Head turned during ${pct(r.issues.head)}% of the test. Move only your eyes.`);
-  if (pct(r.issues.face) > 10) out.push(`Face lost during ${pct(r.issues.face)}% of the test. Improve the lighting or move closer.`);
-  if (pct(r.issues.blink) > 15) out.push(`Eyes closed during ${pct(r.issues.blink)}% of the test.`);
-  if (pct(r.issues.glitch) > 15) out.push(`Tracker glitched during ${pct(r.issues.glitch)}% of the test. Try better light or removing glasses.`);
-  if (r.multiFacePct > 5) out.push('Someone else’s face came into view. The tracker may have followed the wrong person.');
-  return out;
+// A failed camera capture never reaches the score/save controls, even if a
+// caller accidentally supplies stale metrics alongside its failure status.
+export function EyeResults({ result, runId, subject, isSelf, canSeeData, test, onRepeat, onSetup }) {
+  return <div className="results">
+    {!result.ok || result.status === 'unreliable' || !result.metrics ? (
+      <MeasurementIssue result={result} onRepeat={onRepeat} onSetup={onSetup} />
+    ) : <>
+      <ResultPanel key={runId} subject={subject} isSelf={isSelf} canSeeData={canSeeData}
+        test={test} metrics={result.metrics} spec={METRICS} onDiscard={onSetup}>
+        <div className="plot-wrap">
+          <h3>Eyes vs. dot</h3>
+          <p className="muted small">
+            Gray is where the dot was; blue is the measured eye position. Red dots mark catch-up jumps.
+            Gaps are blinks or moments the camera lost the eyes.
+          </p>
+          <TracePlot trace={result.trace} />
+        </div>
+      </ResultPanel>
+      <p className="muted small">Calibration fit {(result.calib.r2 * 100).toFixed(0)}% · usable frames {(result.validFraction * 100).toFixed(0)}%</p>
+    </>}
+  </div>;
 }
 
 // Camera / environment checks before a scan. Each is [label, ok, how to fix].
@@ -531,7 +522,7 @@ export function cameraChecks(live) {
       fix: backlit ? 'There’s bright light behind them. Turn so they face the light, not the sky or a window.' : 'Too dark. Face a window or lamp, or move into brighter shade.' },
     { id: 'steady', label: 'Camera and head are steady', ok: face && live.shake < MAX_SHAKE, fix: 'Prop the phone or laptop on something solid, and keep your head still.' },
     { id: 'straight', label: 'Looking straight at the screen', ok: facing, fix: 'Turn your head so your nose points at the screen.' },
-    { id: 'eyes', label: 'Eyes open', ok: face && !live.blink, fix: 'Open your eyes wide; take glasses off if they glare.' },
+    { id: 'eyes', label: 'Eyes open', ok: face && !live.blink, fix: 'Open your eyes. Keep your usual vision correction; adjust the lighting or camera position to reduce glare.' },
   ];
 }
 
@@ -660,7 +651,7 @@ function DotBuddy() {
 // stays on beside it the whole time.
 const GUIDE_STEPS = ['Position', 'Camera', 'Ready'];
 
-function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, progress }) {
+function ScanGuide({ live, ready, done, unreliable, tips, onStart, readAloud, onReadAloud, progress }) {
   const [step, setStep] = useState(0);
   const headingRef = useRef(null);
   useEffect(() => { headingRef.current?.focus(); }, [step, done]);
@@ -672,10 +663,10 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
   if (done) {
     return (
       <div className="panel scan-guide">
-        <p className="eyebrow">All done</p>
-        <h3 ref={headingRef} tabIndex={-1}>Nice work!</h3>
-        <p className="muted">Your results are below. If something went wrong, run it again.</p>
-        <button className="big-btn" onClick={onStart}>Run again</button>
+        <p className="eyebrow">{unreliable ? 'Capture incomplete' : 'All done'}</p>
+        <h3 ref={headingRef} tabIndex={-1}>{unreliable ? 'Review the capture issue below' : 'Test complete'}</h3>
+        <p className="muted">{unreliable ? 'Keep the camera ready while you adjust the setup, then recalibrate and repeat.' : 'Your results are below.'}</p>
+        {!unreliable && <button className="big-btn" onClick={onStart}>Run again</button>}
       </div>
     );
   }
@@ -697,7 +688,7 @@ function ScanGuide({ live, ready, done, tips, onStart, readAloud, onReadAloud, p
           <h3 ref={headingRef} tabIndex={-1}>Get in position</h3>
           <ul className="guide-list">
             {tips.map((t) => <li key={t}>{t}</li>)}
-            <li>Take glasses off if you can.</li>
+            <li>{VISION_CORRECTION_GUIDANCE}</li>
             <li>Keep your head still. Only your eyes will move.</li>
           </ul>
           <button className="primary big-btn" onClick={() => setStep(1)}>I’m in position</button>
