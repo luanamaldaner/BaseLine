@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { coachAlerts, getSeen, markSeen, notificationsSupported } from '../lib/alerts.js';
 import { formatWhen } from '../lib/status.js';
 import { testById } from '../tests/registry.js';
-import { beep } from '../lib/cues.js';
+import { beep, unlockAudio } from '../lib/cues.js';
 import Avatar from './Avatar.jsx';
 
 const LEVEL = {
@@ -71,7 +71,7 @@ export function AlertsPanel({ unread, names, onOpen, onDismiss, onDismissAll }) 
       {perm === 'default' && (
         <div className="alert-optin">
           <span>Get a notification when a check comes back yellow or red, even if this tab is in the background.</span>
-          <button className="small-btn" onClick={() => Notification.requestPermission().then(setPerm)}>
+          <button className="small-btn" onClick={() => { unlockAudio(); Notification.requestPermission().then(setPerm); }}>
             Turn on notifications
           </button>
         </div>

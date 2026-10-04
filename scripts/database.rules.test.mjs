@@ -92,6 +92,22 @@ test('profiles are private, roles and consent immutable, and team links cannot b
   await denied(client('a').put('profiles/a/unexpected', 'anything'));
 });
 
+test('age confirmation is owner-only, immutable, and can be added without rewriting prior consent', async () => {
+  const owner = client('a');
+  await denied(client('c').put('profiles/a/ageConfirmedAt', at));
+  await denied(owner.put('profiles/a/ageConfirmedAt', true));
+  await owner.put('profiles/a/ageConfirmedAt', at);
+  const profile = (await owner.read('profiles/a')).val();
+  assert.equal(profile.consentedAt, at);
+  assert.equal(profile.ageConfirmedAt, at);
+  await denied(owner.delete('profiles/a/ageConfirmedAt'));
+  await denied(owner.put('profiles/a/ageConfirmedAt', '2026-10-04T12:00:00.000Z'));
+  const newcomer = client('new');
+  await newcomer.put('profiles/new', { role: 'athlete', name: 'New athlete' });
+  await newcomer.patch({ 'profiles/new/consentedAt': at, 'profiles/new/ageConfirmedAt': at });
+  assert.equal((await newcomer.read('profiles/new')).val().ageConfirmedAt, at);
+});
+
 test('coach creation atomically reserves the code, team and profile link; collisions stay protected', async () => {
   const user = client('d');
   const patch = { 'teams/t2': metadata('d', 'GHJKLM'), 'joinCodes/GHJKLM': { teamId: 't2' }, 'profiles/d/teamIds/t2': true };

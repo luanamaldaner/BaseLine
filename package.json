@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "postinstall": "node scripts/copy-wasm.mjs",
-    "test": "node scripts/selftest.mjs && node --test scripts/session.test.mjs scripts/firestore-session.test.mjs scripts/serviceErrors.test.mjs scripts/outbox.test.mjs scripts/legacyRecovery.test.mjs scripts/migrate-realtime.test.mjs",
+    "test": "node scripts/selftest.mjs && node --test scripts/session.test.mjs scripts/firestore-session.test.mjs scripts/serviceErrors.test.mjs scripts/outbox.test.mjs scripts/legacyRecovery.test.mjs scripts/migrate-realtime.test.mjs scripts/demo-data.test.mjs scripts/onboarding.test.mjs scripts/cues.test.mjs",
     "test:rules": "firebase emulators:exec --project demo-dte-hackathon --only database --config firebase.emulators.json \"node --test scripts/database.rules.test.mjs\""
   },
   "dependencies": {

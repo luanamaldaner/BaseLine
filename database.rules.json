@@ -6,7 +6,7 @@
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
         ".write": "auth != null && auth.uid == $uid && !data.exists() && newData.exists() && !newData.child('teamIds').exists()",
-        ".validate": "newData.hasChildren(['name', 'role']) && (!data.child('consentedAt').exists() || newData.child('consentedAt').val() == data.child('consentedAt').val())",
+        ".validate": "newData.hasChildren(['name', 'role']) && (!data.child('consentedAt').exists() || newData.child('consentedAt').val() == data.child('consentedAt').val()) && (!data.child('ageConfirmedAt').exists() || newData.child('ageConfirmedAt').val() == data.child('ageConfirmedAt').val())",
         "role": {
           ".validate": "(newData.val() == 'coach' || newData.val() == 'athlete') && (!data.exists() || newData.val() == data.val())"
         },
@@ -15,6 +15,10 @@
           ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
         },
         "consentedAt": {
+          ".write": "auth != null && auth.uid == $uid && !data.exists() && newData.exists()",
+          ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+        },
+        "ageConfirmedAt": {
           ".write": "auth != null && auth.uid == $uid && !data.exists() && newData.exists()",
           ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
         },

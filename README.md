@@ -49,7 +49,7 @@ A teammate running a check sees **only the call and action, never the athlete's 
 
 Coaches receive in-app alerts for checks run by others that return Monitor, Refer, or No baseline. Optional browser notifications work while the app is open, including in a background tab.
 
-A consent screen explains screening limits and data use before first use, records `consentedAt`, and asks for parent or guardian agreement for users under 18. The privacy notice remains accessible from the footer. Only final scores are saved: **no video or raw sensor recordings are uploaded**. Leaving or removing an athlete does not delete their results; full account deletion is not a self-service feature.
+A consent screen explains screening limits and data use before first use, records `consentedAt`, and asks for parent or guardian agreement for users under 18. Signup and onboarding require users to confirm they are **14 or older**; onboarding records `ageConfirmedAt` without collecting a birth date. This is a user attestation, not identity-based age verification. Both timestamps are immutable. The privacy notice remains accessible from the footer. Only final scores are saved: **no video or raw sensor recordings are uploaded**. Leaving or removing an athlete does not delete their results; full account deletion is not a self-service feature.
 
 ## How scoring works
 
@@ -102,7 +102,7 @@ The device type (phone or laptop) is saved too. Flagged conditions show as tags 
 
 **Eye test camera checks** (before Start): one face in view (the model is asked for two faces so it can notice a bystander, and refuses to start if there are two), close enough to the camera, face well lit and not backlit, camera steady (propped up, not hand-held), facing the screen, and eyes open. A second face appearing mid-test triggers a "retest" warning.
 
-**Balance cues:** the phone is pressed to the chest, so on phones that can vibrate a long buzz means "close your eyes" and three short pulses mean "open them", with the beep and voice as backup. iPhone browsers don't support the vibration API; on iOS 18+ the app uses an unofficial workaround (toggling a hidden switch control, which plays a real haptic tick), so iPhones get a lighter tapping buzz. Because that could stop working in a future iOS, sound stays the main cue on iPhones: volume up, Silent mode and Do Not Disturb off.
+**Balance cues:** the phone is pressed to the chest, so on phones that can vibrate a long buzz means "close your eyes" and three short pulses mean "open them", with the beep and voice as backup. iPhone browsers don't support the vibration API; on iOS 18+ the app uses an unofficial workaround (toggling a hidden switch control, which plays a real haptic tick), so iPhones get a lighter tapping buzz. Sound remains the main cue on iPhones. The preflight **Check sound** button plays a tone and speech after a tap, and the app resumes suspended audio before scheduling cues. Where supported, it requests an [AudioSession playback mode](https://bugs.webkit.org/show_bug.cgi?id=237322) that allows the ringer to stay off. Keep media volume up; Focus or Do Not Disturb can reduce interruptions. Older browsers may still require Silent mode off. Confirm both tone and voice are audible before closing your eyes; browser API checks cannot verify the speaker, volume, or Bluetooth output.
 
 **Baseline sanity checks** ([lib/validity.js](src/lib/validity.js)): a baseline far worse than a healthy athlete usually scores (very slow reactions, eyes not keeping up with the dot, many balance errors) gets a "redo?" prompt before saving. A poor baseline, whether from a bad setup or deliberately doing badly ("sandbagging", a known problem with baseline tests), makes later checks look fine. The cutoffs are generous starting points to be tuned with volunteer data.
 
@@ -129,7 +129,7 @@ Access rules are generated from [scripts/generate-database-rules.mjs](scripts/ge
 
 ```text
 profiles/{uid}                     # owner-only profile
-  role, name, consentedAt?, teamIds: { teamId: true }
+  role, name, consentedAt?, ageConfirmedAt?, teamIds: { teamId: true }
 teams/{teamId}                     # team metadata, no private records
   name, coachUid, coachName, code, createdAt
 joinCodes/{code}                   # single-code lookup, no enumeration
@@ -217,6 +217,8 @@ The one-time administrative migration uses an existing authorized Firebase CLI l
 For a final cutover check, export again and run `node scripts/migrate-realtime.mjs --reconcile <previous-backup> <fresh-backup> --dry-run`. Without `--dry-run`, only newly exported result IDs are conditionally created; existing results and membership permissions are never overwritten. Inspect reported conflicts or account/team changes. Use the fresh successfully reconciled backup for subsequent comparisons. A result recovered and then deleted on a device before reconciliation cannot be distinguished from a never-imported late result without deletion history; refresh old clients promptly.
 
 ## Code layout
+
+[scripts/demo-data.mjs](scripts/demo-data.mjs) builds deterministic fictional records for one coach and four athletes, with normal, monitor, refer, and incomplete-baseline examples. It derives result labels using the app's scoring functions, keeps phone and laptop eye baselines separate, and never creates accounts or fabricates consent. Demo credentials are not stored in source code.
 
 ```text
 src/

@@ -5,34 +5,80 @@
 // transitions get a beep and a buzz (see buzz() for iPhones).
 
 let audioCtx = null;
+let audioUnlocked = false;
+let resuming = null;
+let playbackSession = false;
+
+// iOS 17+ exposes a playback session that is independent of the ringer.
+// Opt in only after a user asks for sound; do not run silent media loops.
+function configurePlayback() {
+  try {
+    if (navigator.audioSession) {
+      navigator.audioSession.type = 'playback';
+      playbackSession = navigator.audioSession.type === 'playback';
+    }
+  } catch { playbackSession = false; }
+  return playbackSession;
+}
+
+function resumeAudio() {
+  try {
+    if (!audioCtx || audioCtx.state === 'closed') audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'running') return Promise.resolve(audioCtx);
+    if (!resuming) {
+      // Invoke resume synchronously inside the tap handler, before any await.
+      resuming = Promise.resolve(audioCtx.resume()).then(() => audioCtx.state === 'running' ? audioCtx : null)
+        .catch(() => null).finally(() => { resuming = null; });
+    }
+    return resuming;
+  } catch { return Promise.resolve(null); }
+}
+
+export const soundSettings = () => ({ unlocked: audioUnlocked, playbackSession });
 
 export function beep(freq = 880, ms = 180) {
-  try {
-    audioCtx ??= new (window.AudioContext || window.webkitAudioContext)();
-    const osc = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
+  if (!audioUnlocked) return Promise.resolve(false);
+  return resumeAudio().then((context) => {
+    if (!context) return false;
+    const osc = context.createOscillator();
+    const gain = context.createGain();
     osc.frequency.value = freq;
     gain.gain.value = 0.2;
-    osc.connect(gain).connect(audioCtx.destination);
+    osc.connect(gain).connect(context.destination);
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); };
     osc.start();
-    osc.stop(audioCtx.currentTime + ms / 1000);
-  } catch {
-    /* no audio: the screen still shows the cue */
-  }
+    osc.stop(context.currentTime + ms / 1000);
+    return true;
+  }).catch(() => false); // the screen still shows the cue
 }
 
 // Mobile browsers only allow audio after a tap; call this from a click handler
 // once and later beeps work without one.
-export const unlockAudio = () => beep(660, 1);
+export function unlockAudio() {
+  audioUnlocked = true;
+  configurePlayback();
+  return resumeAudio().then((context) => ({ audioStarted: !!context, playbackSession }));
+}
+
+// Call directly from a button. Speech begins within that same user gesture;
+// the tone waits for AudioContext.resume so a suspended context cannot eat it.
+export function checkSound() {
+  const ready = unlockAudio();
+  const speechAvailable = say('Sound check. Keep your media volume up.');
+  return ready.then(async (settings) => ({ ...settings, audioStarted: await beep(880, 300), speechAvailable }));
+}
 
 export function say(text, { rate = 0.95 } = {}) {
+  if (!audioUnlocked) return false;
   try {
+    configurePlayback();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.rate = rate;
     speechSynthesis.speak(u);
+    return true;
   } catch {
-    /* speech unsupported */
+    return false;
   }
 }
 

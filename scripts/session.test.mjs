@@ -86,7 +86,7 @@ function setup(initial = {}, options = {}) {
       queues.push(queue); return queue;
     },
   });
-  vm.runInContext(source + '\nglobalThis.api = { getSession, setState, startTeams, stopTeams, createProfile, createTeam, joinTeam, leaveTeam, removeMember, saveHistory, saveBaseline, submitCheck, deleteTrial, syncRanges, retrySync, retryTrial, saveAvatar };', context);
+  vm.runInContext(source + '\nglobalThis.api = { getSession, setState, startTeams, stopTeams, createProfile, createTeam, joinTeam, leaveTeam, removeMember, saveHistory, saveBaseline, submitCheck, deleteTrial, syncRanges, retrySync, retryTrial, saveAvatar, recordConsent };', context);
   const login = async (id = 'me') => { auth.currentUser = { uid: id }; authCallback(auth.currentUser); await flush(); };
   const setConnection = (value) => {
     isConnected = value; emit('.info/connected');
@@ -107,6 +107,42 @@ test('team joins and leaves atomically maintain profile links and coach access p
   assert.equal(h.at('profiles/me/teamIds/t1'), null);
   assert.equal(h.at('recordReaders/me/coach/t1'), null);
   assert.equal(h.at('recordReaders/me/coach/t2'), true);
+});
+
+test('new consent requires an explicit age confirmation and records both timestamps once', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me' } } });
+  await h.login();
+  await assert.rejects(h.api.recordConsent(), /14 or older/);
+  assert.equal(h.writes.length, 0);
+  await h.api.recordConsent({ ageConfirmed: true });
+  const consentedAt = h.at('profiles/me/consentedAt');
+  assert.match(consentedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(h.at('profiles/me/ageConfirmedAt'), consentedAt);
+  assert.deepEqual(Object.keys(h.writes[0].patch).sort(), ['ageConfirmedAt', 'consentedAt']);
+  await h.api.recordConsent({ ageConfirmed: true });
+  assert.equal(h.writes.length, 1);
+  assert.equal(h.at('profiles/me/consentedAt'), consentedAt);
+});
+
+test('adding age confirmation preserves an existing immutable consent and all profile data', async () => {
+  const original = { ...athlete, consentedAt: '2026-10-01T12:00:00.000Z' };
+  const h = setup({ '.info': { connected: true }, profiles: { me: original } });
+  await h.login();
+  await h.api.recordConsent({ ageConfirmed: true });
+  assert.deepEqual(Object.keys(h.writes[0].patch), ['ageConfirmedAt']);
+  assert.equal(h.at('profiles/me/consentedAt'), original.consentedAt);
+  assert.equal(h.at('profiles/me/name'), original.name);
+  assert.deepEqual(h.at('profiles/me/teamIds'), original.teamIds);
+  assert.match(h.at('profiles/me/ageConfirmedAt'), /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test('adding missing consent preserves an existing age confirmation', async () => {
+  const ageConfirmedAt = '2026-10-01T12:00:00.000Z';
+  const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'athlete', name: 'Me', ageConfirmedAt } } });
+  await h.login();
+  await h.api.recordConsent({ ageConfirmed: true });
+  assert.deepEqual(Object.keys(h.writes[0].patch), ['consentedAt']);
+  assert.equal(h.at('profiles/me/ageConfirmedAt'), ageConfirmedAt);
 });
 
 test('leave removes private team history, cutoff and avatar copies without deleting results', async () => {

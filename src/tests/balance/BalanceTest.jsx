@@ -5,7 +5,7 @@ import { formatMetric } from '../../components/ResultCards.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
 import { StanceDiagram } from '../../components/Icons.jsx';
 import { BalanceDemo } from '../../components/Mascot.jsx';
-import { beep, say, buzz, unlockAudio } from '../../lib/cues.js';
+import { beep, say, buzz, unlockAudio, hush } from '../../lib/cues.js';
 
 const TEST = 'balance';
 // Vibration cues: one long buzz = close your eyes; three sharp pulses = open
@@ -71,6 +71,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
     if (activeRef.current) return;
     activeRef.current = true;
     setError(null);
+    unlockAudio(); // before the permission promise can end the user gesture
     try {
       await requestMotionPermission();
     } catch (e) {
@@ -78,7 +79,6 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
       setError(e.message);
       return;
     }
-    unlockAudio(); // while we still have the tap
     try {
       wakeRef.current = await navigator.wakeLock?.request('screen');
     } catch {
@@ -102,6 +102,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
   }
 
   async function runStance() {
+    unlockAudio(); // resume after a phone interruption, while this tap is active
     const stance = STANCES[stanceIdx];
     abortRef.current = false;
     setPhase('countdown');
@@ -178,7 +179,7 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
     activeRef.current = false;
     abortRef.current = true;
     sinkRef.current = null;
-    speechSynthesis?.cancel?.();
+    hush();
     wakeRef.current?.release?.().catch(() => {});
     setPhase('intro');
     if (guided) onFinished?.({ ok: false, aborted: true });
@@ -209,9 +210,9 @@ export default function BalanceTest({ subject, isSelf, canSeeData, guided = fals
           <ol className="tips">
             <li>Shoes off, firm floor. The athlete holds the phone flat against their chest with both hands.</li>
             <li>
-              <b>Sound on.</b> Turn the volume up and switch off Silent mode and Do Not Disturb. On an
-              iPhone the ring switch mutes web audio. With eyes closed, the beep and the voice are the
-              only cues for when to close and open them.
+              <b>Media volume up.</b> Use the sound check before starting. Your ringer can stay off on
+              supported browsers; keep Focus or Do Not Disturb on to reduce interruptions. With eyes
+              closed, you need to hear the cues for when to close and open them.
             </li>
             <li>
               An examiner watches and counts errors: opening the eyes, stepping or stumbling,

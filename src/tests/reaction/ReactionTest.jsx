@@ -3,7 +3,7 @@ import { useTestRunning, useScreenTop } from '../../lib/focus.js';
 import { REACTION, METRICS, randomDelay, computeReaction } from './reaction.js';
 import { ReactionDemo } from '../../components/Mascot.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
-import { say } from '../../lib/cues.js';
+import { say, unlockAudio } from '../../lib/cues.js';
 import DotEmoji from '../../components/DotEmoji.jsx';
 
 const TEST = 'reaction';
@@ -199,7 +199,7 @@ export default function ReactionTest({ subject, isSelf, canSeeData, guided = fal
           </ul>
           <button
             className="ghost speak-btn"
-            onClick={() => say('Tap the box as soon as it turns green. If you tap too early, just wait for the next one. Use your usual hand.')}
+            onClick={() => { unlockAudio(); say('Tap the box as soon as it turns green. If you tap too early, just wait for the next one. Use your usual hand.'); }}
           >
             <DotEmoji mood="talk" size={24} /> Read the instructions to me
           </button>

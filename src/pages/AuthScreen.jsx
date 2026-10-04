@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -35,11 +35,19 @@ export default function AuthScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState(null);
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const busyRef = useRef(false);
 
   async function submit(e) {
     e.preventDefault();
     setError(null);
     setNotice(null);
+    if (busyRef.current) return;
+    if (mode === 'signup' && !ageConfirmed) {
+      setError('You must confirm that you are 14 or older to create an account.');
+      return;
+    }
+    busyRef.current = true;
     setBusy(true);
     try {
       if (mode === 'login') await signInWithEmailAndPassword(auth, email.trim(), password);
@@ -51,6 +59,7 @@ export default function AuthScreen() {
     } catch (err) {
       setError(friendly(err));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -59,6 +68,7 @@ export default function AuthScreen() {
     setMode(m);
     setError(null);
     setNotice(null);
+    setAgeConfirmed(false);
   };
 
   const title = { login: 'Log in', signup: 'Create an account', reset: 'Reset password' }[mode];
@@ -101,9 +111,16 @@ export default function AuthScreen() {
             required
           />
         )}
-        {error && <div className="form-error">{error}</div>}
+        {mode === 'signup' && <>
+          <p className="muted small">You must be 14 or older to use Baseline. If you’re under 18, a parent or guardian must agree before you use the app.</p>
+          <label className="check">
+            <input type="checkbox" required checked={ageConfirmed} disabled={busy} onChange={(e) => setAgeConfirmed(e.target.checked)} />
+            <span>I am 14 or older.</span>
+          </label>
+        </>}
+        {error && <div className="form-error" role="alert">{error}</div>}
         {notice && <div className="form-notice">{notice}</div>}
-        <button className="primary" type="submit" disabled={busy}>
+        <button className="primary" type="submit" disabled={busy || (mode === 'signup' && !ageConfirmed)}>
           {busy ? 'One moment…' : title}
         </button>
         <div className="auth-links small">

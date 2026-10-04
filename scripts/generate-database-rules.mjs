@@ -76,10 +76,11 @@ const rules = {
     '$uid': {
       '.read': `${auth} && ${owner}`,
       '.write': `${auth} && ${owner} && !data.exists() && newData.exists() && !newData.child('teamIds').exists()`,
-      '.validate': "newData.hasChildren(['name', 'role']) && (!data.child('consentedAt').exists() || newData.child('consentedAt').val() == data.child('consentedAt').val())",
+      '.validate': "newData.hasChildren(['name', 'role']) && (!data.child('consentedAt').exists() || newData.child('consentedAt').val() == data.child('consentedAt').val()) && (!data.child('ageConfirmedAt').exists() || newData.child('ageConfirmedAt').val() == data.child('ageConfirmedAt').val())",
       role: scalar(`${valueIn(['coach', 'athlete'])} && (!data.exists() || newData.val() == data.val())`),
       name: { '.write': `${auth} && ${owner} && newData.exists()`, '.validate': name },
       consentedAt: { '.write': `${auth} && ${owner} && !data.exists() && newData.exists()`, '.validate': date },
+      ageConfirmedAt: { '.write': `${auth} && ${owner} && !data.exists() && newData.exists()`, '.validate': date },
       teamIds: {
         '$teamId': {
           '.write': `${auth} && ((newData.exists() && ${owner} && (${coach(profileAfter)} == $uid || (${member(profileAfter)}.exists() && ${reader(profileAfter)}.val() == true))) || (!newData.exists() && (${owner} || ${coach()} == auth.uid) && !${member(profileAfter)}.exists() && !${reader(profileAfter)}.exists() && !${history(profileAfter)}.exists()))`,

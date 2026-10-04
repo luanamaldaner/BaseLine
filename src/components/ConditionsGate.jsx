@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { REST_MINUTES, deviceType } from '../lib/conditions.js';
-import { beep, buzz } from '../lib/cues.js';
+import { beep, buzz, unlockAudio } from '../lib/cues.js';
+import SoundCheck from './SoundCheck.jsx';
 
 // "Before you start": three quick taps about rest, place, and light, so a
 // check is run in conditions that match the baseline. Calls onReady with the
@@ -18,7 +19,10 @@ export default function ConditionsGate({ kind, onReady, onBack }) {
   useEffect(() => { headingRef.current?.focus(); }, []);
 
   const done = rested !== null && place && light && heat !== null && pain !== null;
-  const ready = () => onReady({ rested, place, light, heat, pain, device: deviceType() });
+  const ready = () => {
+    unlockAudio();
+    onReady({ rested, place, light, heat, pain, device: deviceType() });
+  };
 
   if (timerEnd) {
     return (
@@ -52,7 +56,7 @@ export default function ConditionsGate({ kind, onReady, onBack }) {
           can look like a concussion.{' '}
           {kind === 'check' && 'If you suspect a concussion, keep them out of play while they rest.'}
           <div className="row">
-            <button className="small-btn" onClick={() => setTimerEnd(Date.now() + REST_MINUTES * 60_000)}>
+            <button className="small-btn" onClick={() => { unlockAudio(); setTimerEnd(Date.now() + REST_MINUTES * 60_000); }}>
               Start a {REST_MINUTES}-minute rest timer
             </button>
           </div>
@@ -99,6 +103,7 @@ export default function ConditionsGate({ kind, onReady, onBack }) {
         <p className="hint">Pain, a limp, or worry about an injury makes every test worse. It gets noted with the result; it isn’t concussion.</p>
       )}
 
+      <SoundCheck eyesClosed />
       <div className="row">
         <button className="primary big-btn" disabled={!done} onClick={ready}>Continue</button>
         {onBack && <button className="ghost" onClick={onBack}>Back</button>}

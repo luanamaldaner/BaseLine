@@ -7,7 +7,7 @@ import {
 import TracePlot from './TracePlot.jsx';
 import { EyeDemo } from '../../components/Mascot.jsx';
 import ResultPanel, { BaselineProgress } from '../../components/ResultPanel.jsx';
-import { say, hush } from '../../lib/cues.js';
+import { say, hush, unlockAudio } from '../../lib/cues.js';
 import DotEmoji from '../../components/DotEmoji.jsx';
 import { CheckIcon, CloseIcon } from '../../components/Icons.jsx';
 
@@ -240,6 +240,7 @@ function EyeScan({
   async function runTest() {
     // A second tap before the first render would run two tests over each other.
     if (runningRef.current) return;
+    unlockAudio();
     // A second face means the tracker may follow the wrong person.
     if (lastSample.current?.faces > 1) {
       const reason = 'Two faces are in view. Ask anyone nearby to step out of the camera’s view, then try again.';
@@ -380,6 +381,7 @@ function EyeScan({
             onStart={runTest}
             readAloud={readAloud}
             onReadAloud={() => {
+              unlockAudio();
               setReadAloud(true);
               say('Keep your head still and move only your eyes. A little face will appear: look right at its nose, and when it jumps, look at the new spot. Then follow it as it glides side to side.');
             }}
@@ -399,6 +401,7 @@ function EyeScan({
           <button
             className="ghost speak-btn"
             onClick={() => {
+              unlockAudio();
               setReadAloud(true);
               say('Sit an arm\u2019s length from the screen with your face well lit. Keep your head still and move only your eyes. A dot will appear: look right at it, and when it jumps, look at the new spot. Then follow the moving dot.');
             }}

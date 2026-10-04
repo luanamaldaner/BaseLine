@@ -67,7 +67,7 @@ const STEPS = [
     // Eyes will be closed: the beep and the voice are the only cues, so this
     // one always speaks, and the screen warns about anything that mutes it.
     autoSpeak: true,
-    soundNote: 'Turn the volume up and switch off Silent mode and Do Not Disturb. On an iPhone the ring switch mutes the beep and the voice.',
+    soundNote: 'Keep media volume up and check sound before starting. Your ringer can stay off on supported browsers. Use Focus or Do Not Disturb to reduce interruptions.',
     skippable: true, // needs a phone's motion sensor
   },
 ];
