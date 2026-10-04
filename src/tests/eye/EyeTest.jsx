@@ -214,6 +214,17 @@ function EyeScan({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startSignal, status]);
 
+  // Guided mode: a camera or model that fails to start must reach the flow as
+  // a failed step, so it offers Try again / Skip. runTest only runs once the
+  // status is 'ready', so without this the flow sat on a Start button that
+  // did nothing, with Stop everything as the only way out.
+  useEffect(() => {
+    if (props.guided && status === 'error' && mountedRef.current) {
+      props.onFinished?.({ ok: false, reason: error || 'The camera could not start.' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
   // Esc aborts a running test.
   useEffect(() => {
     const onKey = (e) => {

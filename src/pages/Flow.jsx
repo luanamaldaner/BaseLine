@@ -83,7 +83,9 @@ if (quickMode) {
     minDelayMs: 700, maxDelayMs: 1200, feedbackMs: 450,
   });
   Object.assign(PURSUIT, { holdMs: 500, moveMs: 7000, skipMs: 500 });
-  Object.assign(CALIBRATION, { points: [0.2, 0.5, 0.8], dwellMs: 1100, settleMs: 350 });
+  // Four points, not three: three is exactly the minimum the fit accepts, so
+  // one point lost to a blink failed the whole demo run.
+  Object.assign(CALIBRATION, { points: [0.2, 0.4, 0.6, 0.8], dwellMs: 1100, settleMs: 350 });
   Object.assign(BALANCE, { durationMs: 7000, countdownS: 2, settleMs: 350 });
 }
 

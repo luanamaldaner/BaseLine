@@ -19,8 +19,12 @@ export const SPECS = {
   eye: {
     onTarget: { worse: 'lower' },
     gain: { worse: 'lower' },
-    saccadeRate: { worse: 'higher' },
-    lagMs: { worse: 'higher' },
+    // Floors: a healthy baseline often has zero catch-up jumps, and with no
+    // floor its spread is ~0, so the first jump in a check is flagged no
+    // matter how many spreads the rule allows. Lag has camera jitter of a
+    // few frames even when nothing changed.
+    saccadeRate: { worse: 'higher', minSpread: 0.3 },
+    lagMs: { worse: 'higher', minSpread: 40 },
   },
 };
 // The eye test on a phone: same metrics, but its own baseline, because a
