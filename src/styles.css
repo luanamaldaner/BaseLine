@@ -471,7 +471,10 @@ button.link { background: none; border: none; box-shadow: none; min-height: 0; p
    its live panel small and out of the way. */
 .flow-warm { opacity: 0.85; }
 .flow-warm .eye-layout { grid-template-columns: 1fr; max-width: 420px; }
-.flow-warm .camera { aspect-ratio: 4 / 3; }
+/* Keep the live eye preview short enough that the setup signals stay in the
+   same phone viewport. The camera itself is widescreen, so 16:9 also avoids
+   spending vertical space on an invented 4:3 frame. */
+.flow-warm .camera { aspect-ratio: 16 / 9; }
 
 /* Reaction pad in the flow: the same states, less saturated. A concussed
    athlete is often light-sensitive, and the default red/green is a flash. */
