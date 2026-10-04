@@ -122,6 +122,7 @@ export default function AuthScreen() {
             <button type="button" className="link" onClick={() => switchTo('login')}>Back to log in</button>
           )}
         </div>
+        <a className="muted small" href="/merch">Explore the Dot collection · Coming soon</a>
       </form>
     </div>
   );

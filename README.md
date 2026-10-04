@@ -28,6 +28,12 @@ The phone eye-test variant, **`eyePhone`**, has its own baseline, separate from 
 
 Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at three trials per test, and every trial counts toward the baseline.
 
+## Dot collection preview
+
+The separate [Dot collection page](https://baselinetest.web.app/merch) previews a tee, puffer jacket, and softshell jacket inspired by the collection concept. It is linked from sign-in and the app footer, with a return link to Baseline. The main app and existing team invitation links keep their current URLs.
+
+The collection is **coming soon**: images show design concepts, with final products, pricing, and launch timing still to be confirmed. There is no checkout or payment collection. The stated pledge is that **100% of profits will support concussion research**, with the research recipient and donation details to be announced before sales open. The public page does not load the app’s Firebase data subscriptions.
+
 ## Roles and privacy
 
 Coaches create and manage up to ten teams. Athletes can join up to ten teams with a six-character code or a QR invite opening `?join=CODE`; the invite survives signup and offers another team to athletes who are already signed in. Each athlete has one result record shared with the coaches of all their teams, so joining another team never requires new baselines.

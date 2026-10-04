@@ -230,6 +230,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
           Screening tool, not a diagnosis. Any athlete with a suspected concussion should be
           removed from play and evaluated by a clinician.{' '}
           <button type="button" className="link" onClick={() => setPrivacy(true)}>Privacy</button>
+          {' · '}<a href="/merch">Dot collection · Coming soon</a>
         </footer>
       )}
       {privacy && <PrivacyDialog onClose={() => setPrivacy(false)} />}
