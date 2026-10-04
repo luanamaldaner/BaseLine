@@ -1,4 +1,9 @@
-﻿<p align="center"><img src="docs/baseline-logo.png" alt="Baseline logo: the word BaseLine beside Dot, a smiling yellow mascot in a green headband" width="560"></p>
+﻿<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/baseline-logo-dark.png">
+    <img src="docs/baseline-logo.png" alt="Baseline logo: the word BaseLine beside Dot, a smiling yellow mascot in a green headband" width="560">
+  </picture>
+</p>
 
 # Baseline
 
@@ -45,12 +50,6 @@ Baseline is built for a coach on a loud sideline and a young athlete who may nev
 - **Plain language:** every call comes with what it means and what to do next, written for coaches and athletes rather than clinicians.
 
 For a demo-length run during a short pitch, open the app with [`?quick`](https://baselinetest.web.app/?quick): the guided flow uses shorter versions of each test (5 reaction trials, 8-second balance stances, a shorter eye sweep and calibration).
-
-## Dot collection preview
-
-The separate [Dot collection page](https://baselinetest.web.app/merch) previews a tee, puffer jacket, and softshell jacket inspired by the collection concept. It is linked from sign-in and the app footer, with a return link to Baseline. The main app and existing team invitation links keep their current URLs.
-
-The collection is **coming soon**: images show design concepts, with final products, pricing, and launch timing still to be confirmed. There is no checkout or payment collection. The stated pledge is that **100% of profits will support concussion research**, with the research recipient and donation details to be announced before sales open. The public page does not load the app’s Firebase data subscriptions.
 
 ## Roles and privacy
 
@@ -284,3 +283,9 @@ shared/
 - **Trusted scoring:** move teammate-check scoring to a Cloud Function so a tampered phone cannot submit a fabricated status. Current rules validate access and data shape, not the calculation.
 - **Rollout follow-up:** refresh all older clients and confirm their locally queued results have uploaded. The Firestore source remains available for administrative recovery; new clients use only Realtime Database for shared records.
 - **Measurement quality:** device latency, lighting, head motion, sensor support, fatigue, and test setup can affect results. Keep baseline and check conditions consistent. Skipped tests or missing metrics reduce what the overall call covers.
+
+## Dot collection preview
+
+The separate [Dot collection page](https://baselinetest.web.app/merch) previews a tee, puffer jacket, and softshell jacket inspired by the collection concept. It is linked from sign-in and the app footer, with a return link to Baseline. The main app and existing team invitation links keep their current URLs.
+
+The collection is **coming soon**: images show design concepts, with final products, pricing, and launch timing still to be confirmed. There is no checkout or payment collection. The stated pledge is that **100% of profits will support concussion research**, with the research recipient and donation details to be announced before sales open. The public page does not load the app’s Firebase data subscriptions.
