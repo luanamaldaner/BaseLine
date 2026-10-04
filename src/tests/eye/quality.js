@@ -6,6 +6,11 @@
 export const MIN_CAPTURE_FRACTION = 0.9;
 // Existing maximum time spanned by the pursuit velocity calculation.
 export const MAX_SAMPLE_GAP_MS = 120;
+// This only checks whether the camera has established a usable left-to-right
+// eye-position map. It is deliberately below a clinical-quality requirement:
+// a phone trace can be noisy while still being repeatable against that
+// athlete's own baseline. Frame loss and broken maps remain hard failures.
+export const MIN_CALIBRATION_R2 = 0.45;
 
 // A stopped camera emits no "face lost" samples. Measure covered recording
 // time as well as the quality of frames that happened to arrive. Two samples
@@ -33,7 +38,7 @@ export function calibrationIssue(calib) {
   if (!calib?.ok || ![calib.a, calib.b, calib.r2, calib.yaw, calib.eyeDiff].every(Number.isFinite)) {
     return 'The camera could not calibrate eye position. Check the setup and repeat the test.';
   }
-  if (calib.r2 < 0.85) return 'Calibration was shaky. Keep your head still and look right at each dot.';
+  if (calib.r2 < MIN_CALIBRATION_R2) return 'Calibration was shaky. Keep your head still and look right at each dot.';
   return null;
 }
 

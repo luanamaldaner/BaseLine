@@ -74,6 +74,14 @@ export default function Tour({ role, setTab, onClose }) {
     setReady(false);
     setSpot(null);
     setCardPos(null);
+    // Mobile browser viewports move as the address bar expands and collapses,
+    // which can put a desktop-style spotlight on the wrong element. On a
+    // phone, keep the tour centered while it changes tabs; the guide remains
+    // clear and the background stays locked.
+    if (window.matchMedia('(max-width: 640px)').matches) {
+      const timer = setTimeout(() => setReady(true), 50);
+      return () => clearTimeout(timer);
+    }
     if (!step.target) {
       setReady(true);
       return undefined;

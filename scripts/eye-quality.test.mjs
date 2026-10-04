@@ -29,12 +29,18 @@ test('each existing capture warning blocks scoring, including multiple faces in 
   for (const [issue, count, reason] of [['head', 66, /Head turned/], ['face', 66, /Face lost/], ['blink', 96, /Eyes closed/], ['glitch', 96, /landmarks were unreliable/]]) {
     assertUnreliable(computePursuit(samples({ issue: (i) => i < count ? issue : null }), calibration), reason);
   }
-  assertUnreliable(computePursuit(samples(), { ...calibration, r2: 0.84 }), /Calibration was shaky/);
+  assertUnreliable(computePursuit(samples(), { ...calibration, r2: 0.44 }), /Calibration was shaky/);
   assertUnreliable(computePursuit(samples(), calibration, { multiFacePct: 6 }), /Someone else/);
 });
 
 test('the existing quality boundaries still allow modest isolated capture loss', () => {
   const result = computePursuit(samples({ issue: (i) => i < 60 ? 'face' : null }), { ...calibration, r2: 0.85 }, { multiFacePct: 5 });
+  assert.equal(result.ok, true);
+  assert.ok(result.metrics.onTarget > 95);
+});
+
+test('a repeatable but noisy phone calibration can produce a result', () => {
+  const result = computePursuit(samples(), { ...calibration, r2: 0.55 });
   assert.equal(result.ok, true);
   assert.ok(result.metrics.onTarget > 95);
 });
