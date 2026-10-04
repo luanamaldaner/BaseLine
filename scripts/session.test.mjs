@@ -220,6 +220,23 @@ test('saving waits for durable local storage, then shows queued before remote ac
   remote(); await flush(); assert.equal(h.api.getSession().trialWrites.get(trial.id).status, 'saved'); assert.equal(h.api.getSession().pendingWrites, 0);
 });
 
+test('a reconnect automatically retries durable failed results with their original ID', async () => {
+  let online = false;
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } }, {
+    write: async () => { if (!online) throw Object.assign(new Error('Temporary connection loss'), { code: 'unavailable' }); },
+  });
+  await h.login();
+  const trial = await h.api.saveBaseline('reaction', baseline.metrics);
+  await flush();
+  assert.equal(h.api.getSession().trialWrites.get(trial.id).status, 'failed');
+  online = true;
+  h.setConnection(false);
+  h.setConnection(true);
+  await flush();
+  assert.equal(h.api.getSession().trialWrites.get(trial.id).status, 'saved');
+  assert.equal(h.writes.filter((write) => write.path === `trials/me/${trial.id}`).length, 2);
+});
+
 test('teammate check saves privately under the subject and exposes no numerical comparison', async () => {
   const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member, a: member } } });
   await h.login();

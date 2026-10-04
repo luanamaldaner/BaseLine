@@ -60,8 +60,10 @@ export default function App() {
 function SyncStatus({ s }) {
   const n = s.pendingWrites ?? 0;
   const down = s.server && !s.server.ok;
-  const failedIds = [...(s.trialWrites?.entries() ?? [])].filter(([, entry]) => entry.status === 'failed').map(([id]) => id);
+  const failedEntries = [...(s.trialWrites?.entries() ?? [])].filter(([, entry]) => entry.status === 'failed');
+  const failedIds = failedEntries.map(([id]) => id);
   const failed = failedIds.length;
+  const failure = failedEntries[0]?.[1]?.error;
   if (!n && !down && !s.syncError && !failed) return null;
   const results = `${n} result${n === 1 ? '' : 's'}`;
   return (
@@ -70,6 +72,7 @@ function SyncStatus({ s }) {
       {n > 0 && <p>{results} waiting for Firebase confirmation. Keep this device’s browser data so queued results can upload when service resumes.</p>}
       {failed > 0 && <>
         <p>{failed} result{failed === 1 ? '' : 's'} could not upload. They are stored on this device. Keep this browser’s data and retry when connected.</p>
+        {failure && <p className="small">{serviceErrorMessage(failure)}</p>}
         <RetryFailedResults ids={failedIds} />
       </>}
       {down && !s.syncError && <p>Cloud sync is unavailable. Check your connection, then retry.</p>}

@@ -197,8 +197,17 @@ onAuthStateChanged(auth, (user) => {
   if (!user) return;
   connectionStop = onValue(r('.info/connected'), (snapshot) => {
     if (current !== generation) return;
+    const wasConnected = connected;
     connected = snapshot.val() === true;
     setState({ server: { ok: connected, at: Date.now(), ...(connected ? {} : { code: 'unavailable' }) } });
+    // Results are durable on this device. When Firebase returns after a brief
+    // outage (or the app opens again online), resume their original writes
+    // automatically; the outbox keeps the same IDs, so this cannot duplicate
+    // a result that reached the server before the connection dropped.
+    if (connected && !wasConnected) {
+      outbox?.retryAll().catch((error) => { if (current === generation) reportError(error); });
+      recoverDeviceResults();
+    }
   });
   outbox = createTrialOutbox({ ownerId: user.uid,
     write: ({ path, trial }) => writeValue(r(path), trial),
