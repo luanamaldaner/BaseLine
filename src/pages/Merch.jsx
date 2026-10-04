@@ -134,9 +134,7 @@ export default function Merch() {
           <div className="merch-research-heading">
             <p className="merch-eyebrow">02 / More than merch</p>
             <h2 id="merch-research-title">For the game.<br /><em>For the people.</em></h2>
-            <div className="merch-baseline-mark" aria-label="Baseline">
-              <Logo size={82} />
-            </div>
+            <span className="merch-simple-dot" role="img" aria-label="dot" />
           </div>
           <div className="merch-research-copy">
             <p className="merch-research-lead">We’re here for the people on the field, and everyone looking out for them.</p>
