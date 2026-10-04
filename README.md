@@ -1,9 +1,4 @@
-﻿<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/baseline-logo-dark.png">
-    <img src="docs/baseline-logo.png" alt="Baseline logo: the word BaseLine beside Dot, a smiling yellow mascot in a green headband" width="560">
-  </picture>
-</p>
+﻿<p align="center"><img src="docs/baseline-banner.png" alt="Baseline: sideline concussion screening, with Dot, a smiling yellow mascot in a green headband" width="100%"></p>
 
 # Baseline
 
