@@ -216,7 +216,9 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
                   <span className="tab-icon"><Icon />{id === 'roster' && unread > 0 && (
                     <span className="tab-badge" aria-label={unread + ' unread alerts'}>{unread}</span>
                   )}</span>
-                  <span>{shortLabel}</span>
+                  <span className="tab-label">{shortLabel}{id === 'roster' && unread > 0 && (
+                    <span className="tab-badge tab-label-badge" aria-label={unread + ' unread alerts'}>{unread}</span>
+                  )}</span>
                 </span>
               </button>
             ))}

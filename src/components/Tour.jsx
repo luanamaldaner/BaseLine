@@ -48,6 +48,12 @@ export default function Tour({ role, setTab, onClose }) {
     return () => document.documentElement.classList.remove('touring');
   }, []);
 
+  // The tour is an overlay, not a page. Keep swipes and mouse-wheel scrolling
+  // inside its card so a phone never moves the dashboard behind the prompt.
+  const blockBackgroundScroll = (event) => {
+    if (!cardRef.current?.contains(event.target)) event.preventDefault();
+  };
+
   // The target's box plus padding, clipped to the window so a tall section
   // doesn't send the highlight off-screen.
   const measure = () => {
@@ -139,7 +145,8 @@ export default function Tour({ role, setTab, onClose }) {
   const placed = ready && (centered || cardPos);
 
   return (
-    <div className="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
+    <div className="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body"
+      onTouchMove={blockBackgroundScroll} onWheel={blockBackgroundScroll}>
       {spot ? (
         <div key={i} className="tour-spot" style={{ top: spot.top, left: spot.left, width: spot.width, height: spot.height }} />
       ) : (
