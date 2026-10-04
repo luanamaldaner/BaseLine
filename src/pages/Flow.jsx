@@ -73,14 +73,18 @@ const STEPS = [
   },
 ];
 
-// ?quick: a demo-length run for a 3-minute pitch slot. The modules export
-// their settings as plain objects, so a short run is a matter of overriding
-// them once before anything starts.
-if (new URLSearchParams(window.location.search).has('quick')) {
-  Object.assign(REACTION, { practice: 1, trials: 5, minValid: 4 });
-  Object.assign(PURSUIT, { moveMs: 6000 });
-  CALIBRATION.points = [0.2, 0.5, 0.8];
-  Object.assign(BALANCE, { durationMs: 8000, countdownS: 3 });
+// ?quick is an approximately 50-second, three-test walkthrough. The normal
+// assessment keeps its validated timings. These objects are read when a test
+// begins, so apply the compact settings before Flow mounts any test.
+const quickMode = new URLSearchParams(window.location.search).has('quick');
+if (quickMode) {
+  Object.assign(REACTION, {
+    practice: 0, trials: 4, minValid: 3,
+    minDelayMs: 700, maxDelayMs: 1200, feedbackMs: 450,
+  });
+  Object.assign(PURSUIT, { holdMs: 500, moveMs: 7000, skipMs: 500 });
+  Object.assign(CALIBRATION, { points: [0.2, 0.5, 0.8], dwellMs: 1100, settleMs: 350 });
+  Object.assign(BALANCE, { durationMs: 7000, countdownS: 2, settleMs: 350 });
 }
 
 export default function Flow({ subject, isSelf, canSeeData, onDone }) {
@@ -207,7 +211,7 @@ export default function Flow({ subject, isSelf, canSeeData, onDone }) {
           ))}
         </ol>
         <p className="muted">
-          About four minutes. The screen says what to do and reads it out loud. No scores are shown
+          {quickMode ? 'About 50 seconds for the three-test demo.' : 'About four minutes.'} The screen says what to do and reads it out loud. No scores are shown
           until the end. You can stop at any point.
         </p>
         <div className="row">
