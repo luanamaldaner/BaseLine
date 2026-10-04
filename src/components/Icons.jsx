@@ -36,36 +36,20 @@ export const SymptomsIcon = (p) => (
   </Svg>
 );
 
-export const BalanceIcon = (p) => (
-  <Svg {...p}>
-    {/* a tiny Dot balancing on one leg */}
-    <path d="M7 10.5L4.5 9M17 10.5l2.5-1.5" {...ln} />
-    <path d="M11 14.5V20M13 14.5l3 1.8-2 1.5" {...ln} />
-    <ellipse cx="10.4" cy="20.6" rx="2.2" ry="1.1" {...fillLine(G)} />
-    <circle cx="12" cy="9.5" r="5.5" {...fillLine(Y)} />
-    <path d="M6.8 7.6Q12 5.6 17.2 7.6" fill="none" stroke={G} strokeWidth="1.8" />
-    <circle cx="10.2" cy="9.6" r="0.9" fill={L} />
-    <circle cx="13.8" cy="9.6" r="0.9" fill={L} />
-    <path d="M10.8 11.8q1.2 1 2.4 0" {...ln} strokeWidth="1.2" />
-  </Svg>
-);
+// The three tests are drawn as Dot pictures (public/emoji/test-*.png):
+// calm with eyes shut for balance, a lightning bolt for reaction time, and
+// watching a dot for eye pursuit.
+const testPicture = (name) => function TestPicture({ size = 24, label }) {
+  return (
+    <img className="test-picture" src={`${import.meta.env.BASE_URL}emoji/test-${name}.png`}
+      width={size} height={size} alt={label ?? ''} aria-hidden={label ? undefined : true}
+      draggable={false} decoding="async" />
+  );
+};
 
-export const ReactionIcon = (p) => (
-  <Svg {...p}>
-    <path d="M14 2.5L5.5 13.5h5.5l-1.5 8 9-11.5H13z" {...fillLine(Y)} />
-    <path d="M3 6h3M2 9.5h2.5M19 16h2.5M18.5 19.5h3" {...ln} />
-  </Svg>
-);
-
-export const EyeIcon = (p) => (
-  <Svg {...p}>
-    <path d="M2.5 13s3.6-6 9.5-6 9.5 6 9.5 6-3.6 6-9.5 6-9.5-6-9.5-6z" {...fillLine('#fff')} />
-    <circle cx="12" cy="13" r="3.6" fill={G} stroke={L} strokeWidth="1.2" />
-    <circle cx="12" cy="13" r="1.6" fill={L} />
-    <circle cx="13.2" cy="11.8" r="0.8" fill="#fff" />
-    <path d="M7 6.5L6 4.5M12 5V3M17 6.5l1-2" {...ln} />
-  </Svg>
-);
+export const BalanceIcon = testPicture('balance');
+export const ReactionIcon = testPicture('reaction');
+export const EyeIcon = testPicture('eye');
 
 export const UsersIcon = (p) => (
   <Svg {...p}>
@@ -124,7 +108,7 @@ export function TestBadge({ id, size = 44 }) {
   const { Icon, color } = theme;
   return (
     <span className="test-badge" style={{ '--tc': color, width: size, height: size }}>
-      <Icon size={Math.round(size * 0.74)} />
+      <Icon size={Math.round(size * 0.86)} />
     </span>
   );
 }

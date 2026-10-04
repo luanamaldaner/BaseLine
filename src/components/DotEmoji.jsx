@@ -1,85 +1,51 @@
-// Dot emojis: tiny versions of the mascot's face, used instead of system
-// emoji so they look the same on every device and match the app.
+// Dot emojis: little pictures of the mascot used instead of system emoji, so
+// they look the same on every device and match the app. They're PNG images
+// with transparent backgrounds in public/emoji/ (dot-*.png made from
+// scripts/emoji/art.html by scripts/emoji/render.sh); replace a file with
+// another of the same name to change the art.
 //
-//   mood: 'happy'  smiling eyes (done, complete)
-//         'talk'   open mouth + sound waves (read aloud)
-//         'sound'  wide eyes + sound waves on both sides (turn the sound on)
+//   mood: 'happy'  grinning (done, complete)
+//         'talk'   talking, with sound waves (read aloud)
+//         'sound'  sound waves on both sides (turn the sound on)
+//   preset: a Dot color for profile pictures (round pictures, pfp-*.png)
 
-const LINE = '#4a2f17';
-const CHEEK = '#ff8fa3';
+const BASE = import.meta.env.BASE_URL;
 
 // Dot color presets people can pick as their profile picture.
 export const DOT_PRESETS = {
-  sunny: { body: '#fcc934', band: '#10b981', label: 'Sunny' },
-  mint: { body: '#86efac', band: '#38bdf8', label: 'Mint' },
-  sky: { body: '#7dd3fc', band: '#fbbf24', label: 'Sky' },
-  berry: { body: '#f9a8d4', band: '#10b981', label: 'Berry' },
-  grape: { body: '#c4b5fd', band: '#fb7185', label: 'Grape' },
-  tangerine: { body: '#fdba74', band: '#38bdf8', label: 'Tangerine' },
+  yellow: { label: 'Yellow' },
+  green: { label: 'Green' },
+  blue: { label: 'Blue' },
+  pink: { label: 'Pink' },
+  purple: { label: 'Purple' },
+  red: { label: 'Red' },
 };
 
+// Names the presets had before, so pictures people already picked still show.
+const OLD_NAMES = { sunny: 'yellow', mint: 'green', sky: 'blue', berry: 'pink', grape: 'purple', tangerine: 'red' };
+
+export function presetId(id) {
+  const name = OLD_NAMES[id] ?? id;
+  return DOT_PRESETS[name] ? name : 'yellow';
+}
+
+// The sound-wave pictures draw the face smaller to fit the waves, so they're
+// shown a bit larger to keep the face the same size as the others.
+const WAVE_SCALE = 1.24;
+
 export default function DotEmoji({ mood = 'happy', size = 20, label, preset }) {
-  const colors = DOT_PRESETS[preset] ?? DOT_PRESETS.sunny;
-  const clip = `dotemoji-${mood}-${preset ?? 'sunny'}`;
-  const waves = mood === 'talk' || mood === 'sound';
+  const file = preset ? `pfp-${presetId(preset)}` : `dot-${mood}`;
+  const px = Math.round(!preset && (mood === 'talk' || mood === 'sound') ? size * WAVE_SCALE : size);
   return (
-    <svg
-      className="dot-emoji"
-      viewBox={waves ? '-6 0 44 32' : '0 0 32 32'}
-      width={waves ? size * 1.375 : size}
-      height={size}
-      role={label ? 'img' : undefined}
-      aria-label={label}
+    <img
+      className={preset ? 'dot-emoji dot-pfp' : 'dot-emoji'}
+      src={`${BASE}emoji/${file}.png`}
+      width={px}
+      height={px}
+      alt={label ?? ''}
       aria-hidden={label ? undefined : true}
-    >
-      <defs>
-        <clipPath id={clip}><circle cx="16" cy="17" r="12.5" /></clipPath>
-      </defs>
-      <circle cx="16" cy="17" r="12.5" fill={colors.body} />
-      {/* headband */}
-      <g clipPath={`url(#${clip})`}>
-        <path d="M2 8.5 Q16 5 30 8.5 L30 12.5 Q16 9 2 12.5 Z" fill={colors.band} />
-        <path d="M2 10.5 Q16 7 30 10.5" fill="none" stroke="#fff" strokeWidth="1" />
-      </g>
-      <circle cx="16" cy="17" r="12.5" fill="none" stroke={LINE} strokeWidth="1.6" />
-      <ellipse cx="9.5" cy="21" rx="2.2" ry="1.4" fill={CHEEK} opacity="0.75" />
-      <ellipse cx="22.5" cy="21" rx="2.2" ry="1.4" fill={CHEEK} opacity="0.75" />
-
-      {mood === 'happy' && (
-        <>
-          <path d="M9.5 17 q2 -2.4 4 0 M18.5 17 q2 -2.4 4 0" fill="none" stroke={LINE} strokeWidth="1.6" strokeLinecap="round" />
-          <path d="M12.5 21 Q16 25.5 19.5 21 Z" fill={LINE} />
-        </>
-      )}
-      {mood === 'talk' && (
-        <>
-          <ellipse cx="11.5" cy="16.5" rx="1.6" ry="2.1" fill={LINE} />
-          <ellipse cx="20.5" cy="16.5" rx="1.6" ry="2.1" fill={LINE} />
-          <ellipse cx="16" cy="22.2" rx="2.2" ry="2.4" fill={LINE} />
-        </>
-      )}
-      {mood === 'sound' && (
-        <>
-          <circle cx="11.5" cy="16.5" r="2.3" fill={LINE} />
-          <circle cx="20.5" cy="16.5" r="2.3" fill={LINE} />
-          <circle cx="12.2" cy="15.7" r="0.7" fill="#fff" />
-          <circle cx="21.2" cy="15.7" r="0.7" fill="#fff" />
-          <path d="M13.5 21.5 Q16 24 18.5 21.5" fill="none" stroke={LINE} strokeWidth="1.5" strokeLinecap="round" />
-        </>
-      )}
-
-      {waves && (
-        <g fill="none" stroke={colors.band} strokeWidth="1.8" strokeLinecap="round">
-          <path d="M31.5 13 q2.5 4 0 8" />
-          <path d="M34.5 10.5 q4 6.5 0 13" />
-          {mood === 'sound' && (
-            <>
-              <path d="M0.5 13 q-2.5 4 0 8" />
-              <path d="M-2.5 10.5 q-4 6.5 0 13" />
-            </>
-          )}
-        </g>
-      )}
-    </svg>
+      draggable={false}
+      decoding="async"
+    />
   );
 }

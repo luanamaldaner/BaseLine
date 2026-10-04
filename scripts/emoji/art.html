@@ -1,0 +1,152 @@
+<!doctype html>
+<!--
+  Source artwork for the Dot emoji PNGs in public/emoji/.
+  Renders one 512x512 image on a transparent background, chosen by the URL:
+    art.html?face=happy&preset=sunny      (face: happy | talk | sound)
+  Rendered to PNG by scripts/emoji/render.sh. To use better art made
+  elsewhere, just replace the PNG files with ones of the same name.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<style>
+  html, body { margin: 0; background: transparent; }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<script>
+const PRESETS = {
+  sunny: { body: '#ffcf3d', band: '#13b981' },
+  mint: { body: '#8eeaa8', band: '#38bdf8' },
+  sky: { body: '#86d4fb', band: '#fbbf24' },
+  berry: { body: '#ffa9d2', band: '#13b981' },
+  grape: { body: '#c9b8fe', band: '#fb7185' },
+  tangerine: { body: '#ffbb73', band: '#38bdf8' },
+};
+
+// mix two #rrggbb colors; t = 0 gives a, 1 gives b
+function mix(a, b, t) {
+  const p = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const [x, y] = [p(a), p(b)];
+  return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * t).toString(16).padStart(2, '0')).join('');
+}
+
+const q = new URLSearchParams(location.search);
+const face = q.get('face') || 'happy';
+const c = PRESETS[q.get('preset') || 'sunny'];
+const waves = face === 'talk' || face === 'sound';
+const INK = '#4a2511';
+
+const light = mix(c.body, '#ffffff', 0.45);
+const dark = mix(c.body, '#7a3d00', 0.28);
+const rim = mix(c.body, '#5a2a00', 0.55);
+const bandLight = mix(c.band, '#ffffff', 0.35);
+const bandDark = mix(c.band, '#003322', 0.3);
+
+const eyesHappy = `
+  <path d="M164 262 Q196 222 228 262" fill="none" stroke="${INK}" stroke-width="22" stroke-linecap="round"/>
+  <path d="M284 262 Q316 222 348 262" fill="none" stroke="${INK}" stroke-width="22" stroke-linecap="round"/>`;
+const eyesOpen = `
+  <g>
+    <ellipse cx="196" cy="252" rx="27" ry="36" fill="url(#eye)"/>
+    <ellipse cx="316" cy="252" rx="27" ry="36" fill="url(#eye)"/>
+    <ellipse cx="205" cy="236" rx="10" ry="12" fill="#fff"/>
+    <ellipse cx="325" cy="236" rx="10" ry="12" fill="#fff"/>
+    <circle cx="188" cy="268" r="5" fill="#fff" opacity=".85"/>
+    <circle cx="308" cy="268" r="5" fill="#fff" opacity=".85"/>
+  </g>`;
+const mouths = {
+  happy: `
+    <path d="M176 318 Q256 420 336 318 Q256 340 176 318 Z" fill="url(#mouth)" stroke="${INK}" stroke-width="10" stroke-linejoin="round"/>
+    <clipPath id="mclip"><path d="M176 318 Q256 420 336 318 Q256 340 176 318 Z"/></clipPath>
+    <g clip-path="url(#mclip)">
+      <path d="M180 318 Q256 336 332 318 L332 336 Q256 352 180 336 Z" fill="#fff"/>
+      <ellipse cx="256" cy="392" rx="46" ry="28" fill="#ff7b93"/>
+    </g>`,
+  talk: `
+    <ellipse cx="256" cy="350" rx="34" ry="40" fill="url(#mouth)" stroke="${INK}" stroke-width="10"/>
+    <ellipse cx="256" cy="372" rx="20" ry="12" fill="#ff7b93"/>`,
+  sound: `
+    <path d="M206 336 Q256 380 306 336" fill="none" stroke="${INK}" stroke-width="16" stroke-linecap="round"/>`,
+};
+
+const wavesRight = `
+  <g fill="none" stroke="url(#wave)" stroke-width="24" stroke-linecap="round">
+    <path d="M440 200 Q480 270 440 340"/>
+    <path d="M478 164 Q536 270 478 376"/>
+  </g>`;
+const wavesLeft = `
+  <g fill="none" stroke="url(#wave)" stroke-width="24" stroke-linecap="round">
+    <path d="M72 200 Q32 270 72 340"/>
+    <path d="M34 164 Q-24 270 34 376"/>
+  </g>`;
+
+// The face sits a little smaller when sound waves share the square.
+const bodyScale = waves ? 0.74 : 0.92;
+const tx = face === 'talk' ? -34 : 0;
+
+document.body.innerHTML = `
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="body" cx="36%" cy="28%" r="78%">
+      <stop offset="0" stop-color="${light}"/>
+      <stop offset=".55" stop-color="${c.body}"/>
+      <stop offset="1" stop-color="${dark}"/>
+    </radialGradient>
+    <linearGradient id="band" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${bandLight}"/>
+      <stop offset=".6" stop-color="${c.band}"/>
+      <stop offset="1" stop-color="${bandDark}"/>
+    </linearGradient>
+    <radialGradient id="eye" cx="40%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#6b3a1c"/>
+      <stop offset="1" stop-color="#2a1206"/>
+    </radialGradient>
+    <linearGradient id="mouth" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7a2316"/>
+      <stop offset="1" stop-color="#4a1208"/>
+    </linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="${bandLight}"/>
+      <stop offset="1" stop-color="${bandDark}"/>
+    </linearGradient>
+    <clipPath id="ball"><circle cx="256" cy="268" r="200"/></clipPath>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="12"/></filter>
+    <filter id="softer" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="drop" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#3b1d00" flood-opacity=".22"/>
+    </filter>
+  </defs>
+
+  ${face === 'sound' ? wavesLeft : ''}
+  ${waves ? wavesRight.replace('<g ', `<g transform="translate(${tx * 1.6} 0)" `) : ''}
+
+  <g transform="translate(${256 + tx} 268) scale(${bodyScale}) translate(-256 -268)">
+    <g filter="url(#drop)">
+      <circle cx="256" cy="268" r="200" fill="url(#body)"/>
+    </g>
+    <g clip-path="url(#ball)">
+      <!-- shading toward the bottom right -->
+      <ellipse cx="320" cy="420" rx="230" ry="130" fill="${dark}" opacity=".35" filter="url(#soft)"/>
+      <!-- headband: shadow, padded band, white stripe, stitching -->
+      <path d="M40 150 Q256 96 472 150 L472 184 Q256 132 40 184 Z" fill="#000" opacity=".16" filter="url(#softer)" transform="translate(0 14)"/>
+      <path d="M40 124 Q256 70 472 124 L472 184 Q256 130 40 184 Z" fill="url(#band)"/>
+      <path d="M40 152 Q256 98 472 152" fill="none" stroke="#fff" stroke-width="14"/>
+      <path d="M40 132 Q256 78 472 132" fill="none" stroke="${bandLight}" stroke-width="3" stroke-dasharray="10 9" opacity=".8"/>
+      <path d="M40 176 Q256 122 472 176" fill="none" stroke="${bandDark}" stroke-width="3" stroke-dasharray="10 9" opacity=".6"/>
+    </g>
+    <!-- rim -->
+    <circle cx="256" cy="268" r="200" fill="none" stroke="${rim}" stroke-width="7" opacity=".55"/>
+    <!-- gloss -->
+    <ellipse cx="168" cy="196" rx="62" ry="30" fill="#fff" opacity=".55" filter="url(#softer)" transform="rotate(-32 168 196)"/>
+    <!-- cheeks -->
+    <ellipse cx="150" cy="312" rx="38" ry="24" fill="#ff7f9c" opacity=".55" filter="url(#soft)"/>
+    <ellipse cx="362" cy="312" rx="38" ry="24" fill="#ff7f9c" opacity=".55" filter="url(#soft)"/>
+    ${face === 'happy' ? eyesHappy : eyesOpen}
+    ${mouths[face]}
+  </g>
+</svg>`;
+</script>
+</body>
+</html>

@@ -205,7 +205,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
             {pill && <span className="tab-pill" aria-hidden="true" style={pill} />}
             {tabs.map(([id, label, shortLabel, Icon]) => (
               <button key={id} ref={(el) => { tabRefs.current[id] = el; }} className={id === tab ? 'active' : ''} aria-current={id === tab ? 'page' : undefined} onClick={() => setTab(id)}>
-                <span className="tab-desktop"><Icon size={18} /><span>{label}</span></span>
+                <span className="tab-desktop">{label}</span>
                 <span className="tab-phone">
                   <span className="tab-icon"><Icon />{id === 'roster' && unread > 0 && (
                     <span className="tab-badge" aria-label={unread + ' unread alerts'}>{unread}</span>

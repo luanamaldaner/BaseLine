@@ -39,21 +39,29 @@ export function HistoryForm({ history }) {
   const [flags, setFlags] = useState(
     Object.fromEntries(FLAGS.map(([key]) => [key, !!history?.[key]])),
   );
-  const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
+  // null | 'local' (showing here, waiting for the server) | 'synced'
+  const [saved, setSaved] = useState(null);
   const [error, setError] = useState(null);
 
+  // The change shows here right away; the button never waits on the server.
   async function save() {
-    setBusy(true);
     setError(null);
-    setSaved(false);
+    let pending;
     try {
-      await saveHistory({ concussions, ...flags });
-      setSaved(true);
+      pending = saveHistory({ concussions, ...flags });
     } catch (e) {
       setError(e?.message || 'Couldn’t save. Try again.');
-    } finally {
-      setBusy(false);
+      return;
+    }
+    setSaved('local');
+    try {
+      await pending;
+      setSaved('synced');
+    } catch (e) {
+      setSaved(null);
+      setError(/permission.denied/i.test(e?.code ?? '')
+        ? 'Couldn’t share this with your coach yet: the app’s latest database update isn’t published (ask whoever deploys the app).'
+        : e?.message || 'Couldn’t save. Try again.');
     }
   }
 
@@ -84,10 +92,9 @@ export function HistoryForm({ history }) {
       ))}
       {error && <div className="callout danger">{error}</div>}
       <div className="row">
-        <button className="primary" onClick={save} disabled={busy}>
-          {busy ? 'Saving…' : 'Save'}
-        </button>
-        {saved && <span className="saved">Saved.</span>}
+        <button className="primary" onClick={save}>Save</button>
+        {saved === 'local' && <span className="muted small">Sending to your coach…</span>}
+        {saved === 'synced' && <span className="saved">Saved. Your coach can see it.</span>}
       </div>
     </div>
   );

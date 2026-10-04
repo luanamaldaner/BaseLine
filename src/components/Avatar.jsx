@@ -16,7 +16,7 @@ export default function Avatar({ name, uid, size }) {
   if (avatar?.kind === 'dot') {
     return (
       <span className="avatar avatar-dot" style={style} aria-hidden>
-        <DotEmoji mood="happy" preset={avatar.dot} size={size ? size * 0.95 : 44} />
+        <DotEmoji mood="happy" preset={avatar.dot} size={size || 44} />
       </span>
     );
   }

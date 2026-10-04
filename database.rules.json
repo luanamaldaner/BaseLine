@@ -220,7 +220,7 @@
             ".validate": "newData.isString() && newData.val().length <= 120000 && newData.val().matches(/^data:image\\/jpeg;base64,[A-Za-z0-9+\\/=]+$/) && newData.parent().child('kind').val() == 'photo'"
           },
           "dot": {
-            ".validate": "(newData.val() == 'sunny' || newData.val() == 'mint' || newData.val() == 'sky' || newData.val() == 'berry' || newData.val() == 'grape' || newData.val() == 'tangerine') && newData.parent().child('kind').val() == 'dot'"
+            ".validate": "(newData.val() == 'yellow' || newData.val() == 'green' || newData.val() == 'blue' || newData.val() == 'pink' || newData.val() == 'purple' || newData.val() == 'red' || newData.val() == 'sunny' || newData.val() == 'mint' || newData.val() == 'sky' || newData.val() == 'berry' || newData.val() == 'grape' || newData.val() == 'tangerine') && newData.parent().child('kind').val() == 'dot'"
           },
           "$other": {
             ".validate": false

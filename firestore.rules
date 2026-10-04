@@ -123,7 +123,7 @@ service cloud.firestore {
         isValidDateString(d.updatedAt) &&
         ((d.kind == 'photo' && d.photo is string && d.photo.size() <= 120000 &&
           d.photo.matches('data:image/jpeg;base64,[A-Za-z0-9+/=]+')) ||
-         (d.kind == 'dot' && d.dot in ['sunny', 'mint', 'sky', 'berry', 'grape', 'tangerine']));
+         (d.kind == 'dot' && d.dot in ['yellow', 'green', 'blue', 'pink', 'purple', 'red']));
     }
 
     function isValidHistory(d) {

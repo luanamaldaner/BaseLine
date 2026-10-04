@@ -276,7 +276,7 @@ export function AthleteTeam({ teams, members, history }) {
   return <div className="team-pages">
     {[...teams.values()].map((team) => <AthleteTeamCard key={team.id} team={team}
       members={members.filter((m) => m.teamIds.includes(team.id))} />)}
-    <HistoryForm key={history?.updatedAt ?? 'new'} history={history} />
+    <HistoryForm key={history ? 'loaded' : 'new'} history={history} />
     <TeamForm />
   </div>;
 }

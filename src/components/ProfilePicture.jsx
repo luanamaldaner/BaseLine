@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { saveAvatar, useSession, describeError } from '../lib/session.js';
 import Avatar from './Avatar.jsx';
-import DotEmoji, { DOT_PRESETS } from './DotEmoji.jsx';
+import DotEmoji, { DOT_PRESETS, presetId } from './DotEmoji.jsx';
 import { CloseIcon } from './Icons.jsx';
 
 const SIZE = 192; // stored photos are 192x192 JPEGs, about 10-40 KB
@@ -63,7 +63,7 @@ export default function ProfilePicture({ onClose }) {
       await saveAvatar(avatar);
       setSaved(true);
     } catch (e) {
-      setError(e?.code === 'permission-denied'
+      setError(/permission.denied/i.test(e?.code ?? '')
         ? 'Changed on this device. Your team will see it once the app’s latest database update is published (ask whoever deploys the app).'
         : `Changed on this device. It couldn’t reach your team yet: ${describeError(e)}`);
     } finally {
@@ -105,7 +105,7 @@ export default function ProfilePicture({ onClose }) {
         <h3 className="pfp-sub">Or pick a Dot</h3>
         <div className="pfp-dots" role="group" aria-label="Dot pictures">
           {Object.entries(DOT_PRESETS).map(([id, p]) => {
-            const on = current?.kind === 'dot' && current.dot === id;
+            const on = current?.kind === 'dot' && presetId(current.dot) === id;
             return (
               <button key={id} className={`pfp-dot ${on ? 'on' : ''}`} aria-pressed={on}
                 aria-label={`${p.label} Dot`} onClick={() => save({ kind: 'dot', dot: id })}>

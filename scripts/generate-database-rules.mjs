@@ -147,7 +147,7 @@ const rules = {
           kind: scalar(valueIn(['photo', 'dot', 'none'])),
           updatedAt: scalar(date),
           photo: scalar("newData.isString() && newData.val().length <= 120000 && newData.val().matches(/^data:image\\/jpeg;base64,[A-Za-z0-9+\\/=]+$/) && newData.parent().child('kind').val() == 'photo'"),
-          dot: scalar(`${valueIn(['sunny', 'mint', 'sky', 'berry', 'grape', 'tangerine'])} && newData.parent().child('kind').val() == 'dot'`),
+          dot: scalar(`${valueIn(['yellow', 'green', 'blue', 'pink', 'purple', 'red', 'sunny', 'mint', 'sky', 'berry', 'grape', 'tangerine'])} && newData.parent().child('kind').val() == 'dot'`),
         }),
         '.validate': "newData.hasChildren(['kind', 'updatedAt']) && ((newData.child('kind').val() == 'photo' && newData.child('photo').exists()) || (newData.child('kind').val() == 'dot' && newData.child('dot').exists()) || (newData.child('kind').val() == 'none' && !newData.child('photo').exists() && !newData.child('dot').exists()))",
       },
