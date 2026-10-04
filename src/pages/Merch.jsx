@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Logo } from '../brand.jsx';
+import { Dot } from '../components/Mascot.jsx';
 import { useModalDialog } from '../lib/modal.js';
 import '../merch.css';
 
@@ -134,7 +135,9 @@ export default function Merch() {
           <div className="merch-research-heading">
             <p className="merch-eyebrow">02 / More than merch</p>
             <h2 id="merch-research-title">For the game.<br /><em>For the people.</em></h2>
-            <span className="merch-simple-dot" role="img" aria-label="dot" />
+            <svg className="merch-flat-mascot" viewBox="44 58 152 142" role="img" aria-label="Dot mascot" shapeRendering="geometricPrecision">
+              <Dot arms="wave" />
+            </svg>
           </div>
           <div className="merch-research-copy">
             <p className="merch-research-lead">We’re here for the people on the field, and everyone looking out for them.</p>
