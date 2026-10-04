@@ -9,7 +9,7 @@ import QrCode from '../components/QrCode.jsx';
 import { inviteUrl, pendingInvite, clearInvite } from '../lib/invite.js';
 import { AlertsPanel } from '../components/Alerts.jsx';
 import { HistoryForm } from '../components/MedicalHistory.jsx';
-import { UsersIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
+import { UsersIcon, AthletesIcon, ShieldIcon, PulseIcon, AlertIcon, ArrowIcon } from '../components/Icons.jsx';
 import { serviceErrorMessage } from '../lib/serviceErrors.js';
 
 const RANK = { refer: 0, monitor: 1, normal: 2, none: 3 };
@@ -38,7 +38,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
     .sort((a, b) => RANK[a.overall] - RANK[b.overall] || a.name.localeCompare(b.name));
   const weekAgo = new Date(Date.now() - WEEK_MS).toISOString();
   const stats = [
-    { label: 'Athletes', value: rows.length, Icon: UsersIcon, tone: '' },
+    { label: 'Athletes', value: rows.length, Icon: AthletesIcon, tone: '' },
     { label: 'Baselines complete', value: rows.filter((r) => r.baselinesDone === TESTS.length).length, Icon: ShieldIcon, tone: '' },
     { label: 'Checked this week', value: rows.filter((r) => r.lastCheck && r.lastCheck >= weekAgo).length, Icon: PulseIcon, tone: 'gold' },
     { label: 'Need attention', value: rows.filter((r) => r.overall === 'refer' || r.overall === 'monitor').length, Icon: AlertIcon, tone: 'danger' },
@@ -64,7 +64,7 @@ export function Roster({ members, teams, coachName, onOpen, onRunCheck, alerts, 
       <div className="stats" aria-label="Team summary" data-tour="stats">
         {stats.map(({ label, value, Icon, tone }) => (
           <div className={`stat ${tone}`} key={label}>
-            <span className="stat-icon"><Icon size={28} /></span>
+            <span className="stat-icon"><Icon size={32} /></span>
             <span className="stat-value">{value}</span>
             <span className="stat-label">{label}</span>
           </div>

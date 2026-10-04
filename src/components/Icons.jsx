@@ -36,16 +36,17 @@ export const SymptomsIcon = (p) => (
   </Svg>
 );
 
-// The three tests are drawn as Dot pictures (public/emoji/test-*.png):
-// calm with eyes shut for balance, a lightning bolt for reaction time, and
-// watching a dot for eye pursuit.
-const testPicture = (name) => function TestPicture({ size = 24, label }) {
+// Pictures in public/emoji/. The three tests are Dots: calm with eyes shut
+// for balance, a lightning bolt for reaction time, and watching a dot for eye
+// pursuit. The coach's stats have their own (icon-*.png).
+const picture = (file) => function Picture({ size = 24, label }) {
   return (
-    <img className="test-picture" src={`${import.meta.env.BASE_URL}emoji/test-${name}.png`}
+    <img className="test-picture" src={`${import.meta.env.BASE_URL}emoji/${file}.png`}
       width={size} height={size} alt={label ?? ''} aria-hidden={label ? undefined : true}
       draggable={false} decoding="async" />
   );
 };
+const testPicture = (name) => picture(`test-${name}`);
 
 export const BalanceIcon = testPicture('balance');
 export const ReactionIcon = testPicture('reaction');
@@ -64,27 +65,13 @@ export const UsersIcon = (p) => (
   </Svg>
 );
 
-export const ShieldIcon = (p) => (
-  <Svg {...p}>
-    <path d="M12 2.5l8 3v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10v-6z" {...fillLine(G)} />
-    <path d="M8.3 12l2.6 2.6 4.8-5.2" fill="none" stroke="#fff" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
+// Coach stats
+export const AthletesIcon = picture('icon-athletes');
+export const ShieldIcon = picture('icon-baselines');
 
-export const PulseIcon = (p) => (
-  <Svg {...p}>
-    <path d="M12 20.5S3 15 3 8.8C3 6 5 4 7.4 4c2 0 3.4 1.2 4.6 3 1.2-1.8 2.6-3 4.6-3C19 4 21 6 21 8.8c0 6.2-9 11.7-9 11.7z" {...fillLine('#ff8fa3')} />
-    <path d="M5 11h3.2l1.6-3 2.4 6 1.6-3H19" fill="none" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </Svg>
-);
+export const PulseIcon = picture('icon-checked');
 
-export const AlertIcon = (p) => (
-  <Svg {...p}>
-    <path d="M10.3 3.8L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.8a2 2 0 00-3.4 0z" {...fillLine('#fbbf24')} />
-    <path d="M12 9v5" stroke={L} strokeWidth="2.2" strokeLinecap="round" />
-    <circle cx="12" cy="17.3" r="1.3" fill={L} />
-  </Svg>
-);
+export const AlertIcon = picture('icon-attention');
 
 export const ArrowIcon = (p) => (
   <Svg {...p}>
