@@ -1,6 +1,10 @@
-﻿# Baseline
+﻿<p align="center"><img src="docs/baseline-logo.png" alt="Baseline logo: the word BaseLine beside Dot, a smiling yellow mascot in a green headband" width="560"></p>
+
+# Baseline
 
 A browser-based sideline concussion screen that compares each athlete to their own healthy baseline.
+
+*A little Dot, a bigger purpose. Every athlete deserves a baseline.*
 
 **[Live demo](https://baselinetest.web.app)** · **[Short demo run (?quick)](https://baselinetest.web.app/?quick)**
 
@@ -27,6 +31,20 @@ The phone eye-test variant, **`eyePhone`**, has its own baseline, separate from 
 **Run all three** guides the athlete through reaction, eyes, then balance, with a combined save step and overall call. Spoken instructions are available for reaction and eyes and automatic for balance; beeps and vibration provide additional cues where supported. Individual tests are also available.
 
 Dashboards show baseline progress and trends. History includes saved results, deletion, and CSV export; coaches can export the team's results. Baseline completion is marked at three trials per test, and every trial counts toward the baseline.
+
+## Design and experience
+
+Baseline is built for a coach on a loud sideline and a young athlete who may never have taken a test like this, so it aims to be calm, clear, and friendly.
+
+- **Dot, the mascot:** a round character in a sports headband who appears throughout the app. Each test opens with a short animated demo of Dot doing it (following the dot with its eyes, tapping the target, holding a stance), so athletes see what to do before they start.
+- **Guided tour:** first-time users get a short tour from Dot, and the **Tutorial** button in the header replays it at any time.
+- **Dot pictures:** emoji and test icons are custom Dot artwork in `public/emoji/`, so they look the same on every device instead of depending on the phone's emoji font.
+- **Profile pictures:** everyone can upload a photo (cropped and shrunk on the device) or pick one of six Dot pictures; teammates and coaches see it beside the name.
+- **Light and dark mode:** follows the device setting by default, with a toggle in the header.
+- **Phone and laptop layouts:** phones get a bottom tab bar and single-column screens; laptops get centered tabs with a sliding highlight and wider dashboards.
+- **Plain language:** every call comes with what it means and what to do next, written for coaches and athletes rather than clinicians.
+
+For a demo-length run during a short pitch, open the app with [`?quick`](https://baselinetest.web.app/?quick): the guided flow uses shorter versions of each test (5 reaction trials, 8-second balance stances, a shorter eye sweep and calibration).
 
 ## Dot collection preview
 
@@ -116,7 +134,7 @@ The device type (phone or laptop) is saved too. Flagged conditions show as tags 
 
 **Baseline sanity checks** ([lib/validity.js](src/lib/validity.js)): a baseline far worse than a healthy athlete usually scores (very slow reactions, eyes not keeping up with the dot, many balance errors) gets a "redo?" prompt before saving. A poor baseline, whether from a bad setup or deliberately doing badly ("sandbagging", a known problem with baseline tests), makes later checks look fine. The cutoffs are generous starting points to be tuned with volunteer data.
 
-**Pre-existing conditions** (prior concussions, ADHD, vision problems, vestibular or balance problems) shift what a normal result looks like and how long recovery takes. Athletes record them on the Team tab ([MedicalHistory](src/components/MedicalHistory.jsx)); the coach sees them beside that athlete's results. They are private to the athlete and each team?s coach (`history/{teamId}/{uid}`), never on the roster teammates can read. Sessions merge history across teams by the newest `updatedAt` per athlete. Saving writes the same history to every current membership; joining another team copies the current history in the same atomic membership update.
+**Pre-existing conditions** (prior concussions, ADHD, vision problems, vestibular or balance problems) shift what a normal result looks like and how long recovery takes. Athletes record them on the Team tab ([MedicalHistory](src/components/MedicalHistory.jsx)); the coach sees them beside that athlete's results. They are private to the athlete and each team's coach (`history/{teamId}/{uid}`), never on the roster teammates can read. Sessions merge history across teams by the newest `updatedAt` per athlete. Saving writes the same history to every current membership; joining another team copies the current history in the same atomic membership update.
 
 **Practice effects:** the first attempt at an unfamiliar test is often the worst, and a bad early trial widens the baseline's spread and can hide a later deficit. Baselines are three trials and every trial counts. `PRACTICE_TRIALS` in [shared/assess.js](shared/assess.js) can drop leading trials from scoring if the team adds a warm-up trial; it is 0 for now. Reaction time has its own three unscored practice taps inside each run.
 
