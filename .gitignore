@@ -1,8 +1,10 @@
-node_modules/
+# no trailing slash, so a symlink named node_modules is ignored too
+node_modules
 dist/
-public/mediapipe-wasm/
+public/mediapipe-wasm
 .DS_Store
 *.local
 .firebase/
 firebase-debug.log
 database-debug.log
+*.log
