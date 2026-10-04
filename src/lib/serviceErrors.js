@@ -1,6 +1,6 @@
 // Keep infrastructure failures distinct from invalid team codes or form input.
 export function serviceErrorMessage(error, fallback = 'Something went wrong. Try again.') {
-  const code = String(error?.code ?? '').replace(/^firestore\//, '');
+  const code = String(error?.code ?? '').replace(/^(?:firestore|database)\//, '').toLowerCase().replaceAll('_', '-');
   const message = typeof error === 'string' ? error : error?.message ?? '';
   if (error?.name === 'QuotaExceededError') {
     return 'This browser is out of storage space. Free up space before recording more results.';

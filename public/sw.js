@@ -1,5 +1,5 @@
 // Offline shell. Same-origin GETs only: Firebase traffic (other origins) is
-// never touched; Firestore keeps its own offline cache.
+// never touched; pending results use the app's IndexedDB upload queue.
 //   - Page loads: network first, so a deploy shows up right away; fall back
 //     to the last copy when offline.
 //   - Built files, the face model, wasm, icons: cache first (names change

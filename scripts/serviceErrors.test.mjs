@@ -18,6 +18,7 @@ test('browser storage quota stays distinct from Firebase service quota', () => {
 
 test('permission and connection failures have different recovery guidance', () => {
   assert.match(serviceErrorMessage({ code: 'permission-denied' }), /correct account and team/);
+  assert.match(serviceErrorMessage({ code: 'PERMISSION_DENIED' }), /correct account and team/);
   assert.match(serviceErrorMessage({ code: 'unavailable' }), /connection/);
   assert.match(serviceErrorMessage({ code: 'unauthenticated' }), /Sign in again/);
 });

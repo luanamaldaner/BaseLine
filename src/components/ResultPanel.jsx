@@ -100,7 +100,7 @@ export default function ResultPanel({ subject, isSelf, canSeeData, test, metrics
           <ResultCards metrics={metrics} spec={spec} comparison={comparison} />
         )}
         {canSeeData && children}
-        <ResultSaveStatus ids={[saved.result.trialId]} label="Post-hit check" />
+        <ResultSaveStatus ids={[saved.result.trialId]} label="Post-hit check" recordLabel={isSelf ? 'your account' : `${subject.name}’s record`} />
         {!canSeeData && <p className="muted small">Only they and the coach can see the numbers.</p>}
       </div>
     );

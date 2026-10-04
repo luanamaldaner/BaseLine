@@ -397,6 +397,7 @@ function Summary({ subject, isSelf, canSeeData, results, onDone }) {
       {progress && <ResultSaveStatus
         ids={Object.values(progress.byTest).map((result) => progress.kind === 'baseline' ? result.id : result.trialId)}
         label={`${Object.keys(progress.byTest).length} ${progress.kind === 'baseline' ? 'baseline trial' : 'post-hit check'}${Object.keys(progress.byTest).length === 1 ? '' : 's'}`}
+        recordLabel={isSelf ? 'your account' : `${subject.name}’s record`}
       />}
       {!saved && (
         <div className="row">

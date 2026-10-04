@@ -5,334 +5,263 @@ import { test } from 'node:test';
 import * as assess from '../shared/assess.js';
 import { serviceErrorMessage } from '../src/lib/serviceErrors.js';
 
-// Exercise session transitions without connecting to the live project.
 const source = readFileSync(new URL('../src/lib/session.js', import.meta.url), 'utf8')
   .replace(/^import[\s\S]*?from ['"].*?['"];\s*/gm, '')
-  .replaceAll('import.meta.env.DEV', 'false')
-  .replace(/\bexport /g, '');
+  .replaceAll('import.meta.env.DEV', 'false').replace(/\bexport /g, '');
+const plain = (value) => JSON.parse(JSON.stringify(value));
+const flush = () => new Promise((resolve) => setImmediate(resolve));
+const baseline = { subjectUid: 'me', testerUid: 'me', test: 'reaction', kind: 'baseline', at: '2026-10-01T12:00:00.000Z', metrics: { medianMs: 250, spreadMs: 30, mistakes: 0 } };
+const team = (coachUid = 'coach', code = 'ABCDEF') => ({ coachUid, name: 'Team', coachName: 'Coach', code, createdAt: baseline.at });
+const member = { name: 'Me', code: 'ABCDEF', joinedAt: baseline.at };
+const athlete = { role: 'athlete', name: 'Me', teamIds: { t1: true } };
 
-function setup(initial = {}, role = 'athlete', options = {}) {
-  const data = new Map(Object.entries(initial));
-  const streams = new Map();
-  const writes = [];
-  const reads = [];
-  const timers = [];
-  const auth = { currentUser: { uid: 'me' } };
-  let serial = 0;
-  const ref = (...parts) => {
-    if (typeof parts[0] === 'object') {
-      const parent = parts.shift();
-      if (parent.path) parts.unshift(parent.path);
-    }
-    const path = parts.join('/');
-    return { path, id: path.split('/').at(-1) };
+function setup(initial = {}, options = {}) {
+  if (options.server && !options.server.initialized) {
+    options.server.data = plain(options.server.data);
+    options.server.initialized = true;
+  }
+  const data = options.server?.data ?? plain(initial), streams = new Map(), writes = [], reads = [], timers = [], queues = [];
+  let authCallback, serial = 0;
+  let isConnected = data['.info']?.connected === true;
+  const auth = { currentUser: null };
+  const local = new Map();
+  const at = (path) => path === '.info/connected' ? isConnected
+    : path.split('/').filter(Boolean).reduce((obj, key) => obj?.[key], data) ?? null;
+  const assign = (path, value) => {
+    const parts = path.split('/').filter(Boolean); let node = data;
+    for (const part of parts.slice(0, -1)) node = node[part] ??= {};
+    if (value === null) delete node[parts.at(-1)]; else node[parts.at(-1)] = plain(value);
   };
-  const snapshot = (r, metadata = {}) => ({
-    id: r.id, ref: r, exists: () => data.has(r.path), data: () => data.get(r.path),
-    metadata: { fromCache: false, hasPendingWrites: false, ...metadata },
-  });
-  const tx = () => {
-    const pending = [];
-    return {
-      get: async (r) => snapshot(r),
-      set: (r, value) => pending.push(['set', r, value]),
-      update: (r, value) => pending.push(['update', r, value]),
-      delete: (r) => pending.push(['delete', r]),
-      commit: async () => {
-        for (const [op, r, value] of pending) {
-          writes.push({ op, path: r.path, value });
-          if (op === 'delete') data.delete(r.path);
-          else data.set(r.path, op === 'update' ? { ...data.get(r.path), ...value } : value);
-        }
-      },
-    };
+  const snap = (path) => ({ val: () => at(path), exists: () => at(path) !== null, key: path.split('/').at(-1) });
+  const emit = (path) => { for (const entry of streams.get(path) ?? []) if (entry.active) entry.next(snap(path)); };
+  const notifyLocal = (path) => {
+    if (!isConnected && path !== '.info/connected') return;
+    for (const key of streams.keys()) if (key === path || key.startsWith(path + '/') || path.startsWith(key + '/')) emit(key);
+  };
+  if (options.server) options.server.clients.add(notifyLocal);
+  const notify = (path) => options.server ? options.server.clients.forEach((client) => client(path)) : notifyLocal(path);
+  const write = async (reference, value) => {
+    writes.push({ path: reference.path, value: plain(value) });
+    if (options.write) await options.write(reference.path, value);
+    assign(reference.path, value); notify(reference.path);
   };
   const context = vm.createContext({
-    ...assess, serviceErrorMessage, auth, db: {}, console, crypto: globalThis.crypto,
-    setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); timers.push({ fn, ms }); return timer; }, clearTimeout,
-    useSyncExternalStore: () => {}, onAuthStateChanged: () => {}, signOut: () => {},
-    collection: ref,
-    doc: (...parts) => parts.length === 1 ? ref(parts[0], 'new' + ++serial) : ref(...parts),
-    query: (r, filter) => ({ ...r, filter }), where: (field, op, value) => ({ field, value }),
-    getDocFromServer: async (r) => { reads.push(r.path); if (options.readError) throw options.readError; return snapshot(r); },
-    getDocsFromServer: async (r) => ({ docs: [...data.keys()]
-      .filter((path) => path.startsWith(r.path + '/') && path.split('/').length === r.path.split('/').length + 1)
-      .filter((path) => !r.filter || data.get(path)[r.filter.field] === r.filter.value)
-      .map((path) => snapshot(ref(path))) }),
-    onSnapshot: (r, ...args) => {
-      const next = typeof args[0] === 'function' ? args[0] : args[1];
-      const error = typeof args[0] === 'function' ? args[1] : args[2];
-      const entry = { r, next, error, active: true };
-      if (!streams.has(r.path)) streams.set(r.path, []);
-      streams.get(r.path).push(entry);
+    ...assess, serviceErrorMessage, auth, realtimeDb: {}, console, crypto: globalThis.crypto,
+    localStorage: { getItem: (key) => local.get(key) ?? null, setItem: (key, value) => local.set(key, value) },
+    recoverLegacyTrials: async () => ({ recovered: 0, skipped: 0, errors: [] }),
+    setTimeout: (fn, ms) => { const timer = setTimeout(fn, ms); timer.unref(); timers.push(ms); return timer; }, clearTimeout,
+    useSyncExternalStore: () => {}, onAuthStateChanged: (_, fn) => { authCallback = fn; }, signOut: () => {},
+    ref: (_, path) => {
+      if (path === '') throw new Error('ref() path argument cannot be empty');
+      return { path: path ?? '', key: path?.split('/').at(-1) };
+    },
+    push: (parent) => { const key = (options.clientId ?? '') + 'new' + ++serial; return { path: parent.path + '/' + key, key }; },
+    get: async (reference) => { reads.push(reference.path); return snap(reference.path); },
+    writeValue: write, remove: (reference) => write(reference, null),
+    update: async (reference, patch) => {
+      writes.push({ path: reference.path, patch: plain(patch) });
+      const paths = Object.entries(patch).map(([key, value]) => { const path = [reference.path, key].filter(Boolean).join('/'); assign(path, value); return path; });
+      for (const path of paths) notify(path);
+    },
+    runTransaction: async (reference, change) => { const result = change(at(reference.path)); if (result !== undefined) await write(reference, result); return { snapshot: snap(reference.path), committed: result !== undefined }; },
+    onValue: (reference, next, error) => {
+      const entry = { active: true, next, error };
+      if (!streams.has(reference.path)) streams.set(reference.path, []);
+      streams.get(reference.path).push(entry);
+      queueMicrotask(() => { if (entry.active && !options.manualStreams?.includes(reference.path)) next(snap(reference.path)); });
       return () => { entry.active = false; };
     },
-    runTransaction: async (_, fn) => { const batch = tx(); const result = await fn(batch); await batch.commit(); return result; },
-    writeBatch: tx,
-    setDoc: async (r, value) => {
-      writes.push({ op: 'set', path: r.path, value });
-      if (options.setDoc) await options.setDoc(r, value);
-      data.set(r.path, value);
-    },
-    updateDoc: async (r, value) => data.set(r.path, { ...data.get(r.path), ...value }),
-    deleteDoc: async (r) => { writes.push({ op: 'delete', path: r.path }); data.delete(r.path); },
-  });
-  vm.runInContext(source + '\nglobalThis.api = { set, getSession, startTeams, stopTeam, migrateProfile, createProfile, createTeam, joinTeam, leaveTeam, saveHistory, saveBaseline, submitCheck, deleteTrial, watchProfile, syncRanges, retryTrial, retrySync };', context);
-  const api = context.api;
-  api.set({ user: auth.currentUser, profile: data.get('users/me') ?? { role, name: 'Me', teamIds: ['t1'], teamId: 't1' } });
-  const emit = (path, items, metadata = {}) => {
-    for (const entry of streams.get(path) ?? []) {
-      if (!entry.active) continue;
-      const snap = items === null ? snapshot(ref(path), metadata) : {
-        docs: items.map(([id, value, meta = {}]) => ({ id, ref: ref(path, id), data: () => value, metadata: { hasPendingWrites: false, ...meta } })),
-        metadata: { fromCache: false, hasPendingWrites: false, ...metadata },
+    createTrialOutbox: ({ ownerId, write: send, onChange }) => {
+      const jobs = new Map(); let closed = false;
+      const publish = () => { if (!closed) onChange(new Map(jobs)); };
+      const run = (entry) => {
+        entry.status = 'pending'; publish();
+        send(entry).then(() => { entry.status = 'saved'; publish(); }, (error) => { entry.status = 'failed'; entry.error = error.message; publish(); });
       };
-      entry.next(snap);
-    }
+      const queue = { ownerId, jobs, ready: Promise.resolve(),
+        enqueue: async (item) => { if (options.persist) await options.persist(item); const entry = { ...item, status: 'pending' }; jobs.set(item.id, entry); run(entry); return entry; },
+        retry: async (id) => { const entry = jobs.get(id); if (entry?.status === 'failed') run(entry); return entry; },
+        retryAll: async () => { for (const entry of jobs.values()) if (entry.status === 'failed') run(entry); }, close: () => { closed = true; },
+      };
+      queues.push(queue); return queue;
+    },
+  });
+  vm.runInContext(source + '\nglobalThis.api = { getSession, setState, startTeams, stopTeams, createProfile, createTeam, joinTeam, leaveTeam, removeMember, saveHistory, saveBaseline, submitCheck, deleteTrial, syncRanges, retrySync, retryTrial, saveAvatar };', context);
+  const login = async (id = 'me') => { auth.currentUser = { uid: id }; authCallback(auth.currentUser); await flush(); };
+  const setConnection = (value) => {
+    isConnected = value; emit('.info/connected');
+    if (value) for (const path of streams.keys()) if (path !== '.info/connected') emit(path);
   };
-  const fail = (path, error) => { for (const entry of streams.get(path) ?? []) if (entry.active) entry.error(error); };
-  return { api, data, streams, writes, reads, timers, emit, fail, auth };
+  const fail = (path, error) => { for (const entry of streams.get(path) ?? []) if (entry.active) entry.error?.(error); };
+  return { api: context.api, data, at, assign, emit, fail, streams, writes, reads, timers, queues, login, auth, setConnection };
 }
 
-const baseline = { subjectUid: 'me', testerUid: 'me', test: 'reaction', kind: 'baseline', at: '2026-10-01T12:00:00.000Z', metrics: { medianMs: 250, spreadMs: 30, mistakes: 0 } };
-const team = (coachUid = 'coach') => ({ coachUid, name: 'Team', coachName: 'Coach', code: 'ABCDEF' });
-const member = { name: 'Me', joinedAt: '2026-10-01T12:00:00.000Z', code: 'ABCDEF' };
-const plain = (value) => JSON.parse(JSON.stringify(value));
+test('team joins and leaves atomically maintain profile links and coach access per shared team', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team(), t2: team() },
+    members: { t1: { me: member } }, joinCodes: { ABCDEF: { teamId: 't2' } }, recordReaders: { me: { coach: { t1: true } } } });
+  await h.login(); await h.api.joinTeam('abcdef'); await h.api.joinTeam('ABCDEF');
+  assert.equal(h.at('profiles/me/teamIds/t2'), true);
+  assert.equal(h.at('recordReaders/me/coach/t2'), true);
+  assert.equal(h.writes.filter((w) => w.patch?.['members/t2/me']).length, 1);
+  await h.api.leaveTeam('t1');
+  assert.equal(h.at('profiles/me/teamIds/t1'), null);
+  assert.equal(h.at('recordReaders/me/coach/t1'), null);
+  assert.equal(h.at('recordReaders/me/coach/t2'), true);
+});
 
-test('Firestore sorted map keys do not rewrite identical cutoffs', async () => {
-  const { api, emit, writes } = setup();
+test('leave removes private team history, cutoff and avatar copies without deleting results', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } },
+    trials: { me: { b: baseline } }, history: { t1: { me: { concussions: 1 } } }, avatars: { t1: { me: { kind: 'dot', dot: 'happy' } } } });
+  await h.login(); await h.api.leaveTeam('t1');
+  assert.equal(h.at('history/t1/me'), null); assert.equal(h.at('avatars/t1/me'), null);
+  assert.equal(h.at('ranges/t1/me_reaction'), null);
+  assert.deepEqual(h.at('trials/me/b'), baseline);
+});
+
+test('equal cutoff maps with different key order never create repeated writes', async () => {
   const lim = assess.limitsFrom(assess.summarize([baseline]), assess.SPECS.reaction);
-  const sorted = Object.fromEntries(Object.entries(lim.limits).sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => [key, { limit: value.limit, worse: value.worse }]));
-  api.startTeams(['t1'], 'me', 'athlete');
-  emit('teams/t1/members', [['me', member]]);
-  emit('users/me/trials', [['b', baseline]]);
-  emit('teams/t1/trials', []);
-  for (let i = 0; i < 20; i++) emit('teams/t1/ranges', [['me_reaction', { subjectUid: 'me', test: 'reaction', n: lim.n, limits: sorted }]]);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(writes.length, 0);
-  api.stopTeam();
+  lim.limits = Object.fromEntries(Object.entries(lim.limits).sort(([a], [b]) => a.localeCompare(b)).map(([key, v]) => [key, { limit: v.limit, worse: v.worse }]));
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } },
+    trials: { me: { b: baseline } }, ranges: { t1: { me_reaction: { subjectUid: 'me', test: 'reaction', ...lim } } } });
+  await h.login();
+  for (let i = 0; i < 30; i++) h.emit('ranges/t1');
+  await flush(); assert.equal(h.writes.length, 0);
+  assert.equal(h.reads.length, 0); assert.equal(h.timers.length, 0);
 });
 
-test('pending results survive reload status and a rejected restored result can be retried', async () => {
-  const { api, emit, data } = setup();
-  api.startTeams(['t1'], 'me', 'athlete');
-  emit('users/me/trials', [['queued', baseline, { hasPendingWrites: true }]], { fromCache: true, hasPendingWrites: true });
-  assert.equal(api.getSession().pendingWrites, 1);
-  emit('users/me/trials', []);
-  assert.equal(api.getSession().pendingWrites, 0);
-  assert.equal(api.getSession().trialWrites.get('queued').status, 'failed');
-  await api.retryTrial('queued');
-  assert.equal(api.getSession().trialWrites.get('queued').status, 'saved');
-  assert.deepEqual(plain(data.get('users/me/trials/queued')), baseline);
-  api.stopTeam();
+test('one coach record listener per athlete remains until the last shared team is left', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'coach', name: 'Me', teamIds: { t1: true, t2: true } } },
+    teams: { t1: team('me'), t2: team('me') }, members: { t1: { a: member }, t2: { a: member } } });
+  await h.login(); assert.equal(h.streams.get('trials/a').length, 1);
+  h.assign('members/t1/a', null); h.emit('members/t1'); assert.equal(h.streams.get('trials/a')[0].active, true);
+  h.assign('members/t2/a', null); h.emit('members/t2'); assert.equal(h.streams.get('trials/a')[0].active, false);
 });
 
-test('migration preserves ids, external tester, conditions and phone eye results; safe twice', async () => {
-  const check = { ...baseline, kind: 'check', test: 'eyePhone', testerUid: 'teammate', status: 'monitor',
-    metrics: { onTarget: 80, gain: 1, saccadeRate: 2, lagMs: 100, trackingError: 5 },
-    conditions: { rested: true, place: 'quiet', light: 'shade', device: 'phone' } };
-  const { api, data, writes } = setup({
-    'users/me': { role: 'athlete', name: 'Me', teamId: 't1', consentedAt: baseline.at },
-    'teams/t1': team(), 'teams/t1/members/me': member,
-    'teams/t1/trials/b': baseline, 'teams/t1/trials/c': check,
+test('denied coach record read never deletes existing published cutoffs', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: { role: 'coach', name: 'Me', teamIds: { t1: true } } }, teams: { t1: team('me') },
+    members: { t1: { a: member } }, ranges: { t1: { a_reaction: { subjectUid: 'a', test: 'reaction', n: 3, limits: {} } } } }, { manualStreams: ['trials/a'] });
+  await h.login(); h.fail('trials/a', { code: 'PERMISSION_DENIED' }); await flush();
+  assert.equal(h.api.getSession().trialsReady, true);
+  assert.equal(h.api.getSession().recordsReady.has('a'), false);
+  assert.equal(h.writes.length, 0);
+});
+
+test('saving waits for durable local storage, then shows queued before remote acknowledgement', async () => {
+  let durable, remote;
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } }, {
+    persist: () => new Promise((resolve) => { durable = resolve; }),
+    write: (path) => path.startsWith('trials/') ? new Promise((resolve) => { remote = resolve; }) : undefined,
   });
-  await Promise.all([api.migrateProfile('me'), api.migrateProfile('me')]);
-  await api.migrateProfile('me');
-  assert.deepEqual(plain(data.get('users/me/trials/c')), { ...check, teamId: 't1' });
-  assert.equal(data.get('users/me/trials/b').teamId, null);
-  assert.deepEqual(plain(data.get('users/me').teamIds), ['t1']);
-  assert.deepEqual(plain(data.get('users/me').coachUids), ['coach']);
-  assert.equal(data.get('users/me').consentedAt, baseline.at);
-  assert.equal(writes.filter((w) => w.path.includes('/trials/')).length, 2);
-  assert.ok(data.has('teams/t1/trials/b'));
+  await h.login(); let returned = false;
+  const saved = h.api.saveBaseline('reaction', baseline.metrics).then((trial) => { returned = true; return trial; });
+  await flush(); assert.equal(returned, false); assert.equal(h.writes.length, 0);
+  durable(); const trial = await saved;
+  assert.equal(h.api.getSession().trialWrites.get(trial.id).status, 'pending'); assert.equal(h.api.getSession().pendingWrites, 1);
+  remote(); await flush(); assert.equal(h.api.getSession().trialWrites.get(trial.id).status, 'saved'); assert.equal(h.api.getSession().pendingWrites, 0);
 });
 
-test('join and leave keep a coach who still has another shared team', async () => {
-  const { api, data } = setup({
-    'users/me': { role: 'athlete', name: 'Me', teamIds: ['t1'], teamId: 't1', coachUids: ['coach'] },
-    'teams/t1': team(), 'teams/t2': team(), 'teams/t1/members/me': member,
-    'joinCodes/ABCDEF': { teamId: 't2' },
-  });
-  await api.joinTeam('abcdef');
-  await api.joinTeam('ABCDEF');
-  assert.deepEqual(plain(data.get('users/me').teamIds), ['t1', 't2']);
-  assert.deepEqual(plain(data.get('users/me').coachUids), ['coach']);
-  await api.leaveTeam('t1');
-  assert.equal(data.get('users/me').teamId, 't2');
-  assert.deepEqual(plain(data.get('users/me').coachUids), ['coach']);
-  await api.leaveTeam('t2');
-  assert.deepEqual(plain(data.get('users/me').coachUids), []);
-  assert.equal(data.get('users/me').teamId, null);
+test('teammate check saves privately under the subject and exposes no numerical comparison', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member, a: member } } });
+  await h.login();
+  const result = await h.api.submitCheck('a', 'reaction', baseline.metrics, { rested: true }); await flush();
+  assert.equal(result.comparison, undefined); assert.ok(result.trialId);
+  assert.equal(h.at(`trials/a/${result.trialId}`).testerUid, 'me');
+  assert.equal(h.at(`trials/a/${result.trialId}`).conditions.rested, true);
+  assert.equal(h.api.getSession().trials.has(result.trialId), false);
+  await assert.rejects(h.api.submitCheck('outsider', 'reaction', baseline.metrics), /shared team/);
 });
 
-test('legacy and record merge deduplicates and waits before publishing cutoffs to every team', async () => {
-  const { api, emit, writes } = setup();
-  api.set({ profile: { role: 'athlete', teamIds: ['t1', 't2'], teamId: 't1' } });
-  api.startTeams(['t1', 't2'], 'me', 'athlete');
-  emit('teams/t1/members', [['me', member]]);
-  emit('teams/t2/members', [['me', member]]);
-  emit('users/me/trials', [['b', { ...baseline, teamId: null }]]);
-  emit('teams/t1/trials', [['b', baseline]]);
-  emit('teams/t1/ranges', []);
-  emit('teams/t2/ranges', []);
-  assert.equal(writes.length, 0);
-  emit('teams/t2/trials', [['c', { ...baseline, at: '2026-10-02T12:00:00.000Z' }]]);
-  assert.equal(api.getSession().trials.size, 2);
-  assert.equal(api.getSession().trials.get('b').teamId, null);
-  assert.equal(api.getSession().trials.get('b').paths.length, 2);
-  assert.deepEqual(plain(api.getSession().members.get('me').teamIds), ['t1', 't2']);
-  assert.deepEqual(writes.filter((w) => w.path.endsWith('me_reaction')).map((w) => w.path).sort(),
-    ['teams/t1/ranges/me_reaction', 'teams/t2/ranges/me_reaction']);
-  api.stopTeam();
-  const before = api.getSession();
-  emit('teams/t1/trials', []);
-  assert.equal(api.getSession(), before);
+test('creating an existing profile never overwrites its role or name', async () => {
+  const original = { role: 'coach', name: 'Original' };
+  const h = setup({ '.info': { connected: true }, profiles: { me: original } });
+  await h.login(); await h.api.createProfile('athlete', 'Replacement');
+  assert.deepEqual(h.at('profiles/me'), original); assert.equal(h.writes.length, 0);
 });
 
-test('coach has one record listener per athlete, retained until last shared team is left', () => {
-  const { api, emit, streams } = setup({}, 'coach');
-  api.startTeams(['t1', 't2'], 'me', 'coach');
-  emit('teams/t1/members', [['a', member]]);
-  emit('teams/t2/members', [['a', member]]);
-  assert.equal(streams.get('users/a/trials').length, 1);
-  emit('teams/t1/members', []);
-  assert.ok(streams.get('users/a/trials')[0].active);
-  emit('teams/t2/members', []);
-  assert.equal(streams.get('users/a/trials')[0].active, false);
-  api.stopTeam();
+test('null metrics removed by RTDB remain part of the baseline metric shape', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } },
+    trials: { me: { a: { ...baseline, metrics: {} }, b: { ...baseline, at: '2026-10-02T12:00:00.000Z' } } } });
+  await h.login();
+  assert.equal(h.api.getSession().trials.get('a').metrics.medianMs, null);
+  assert.equal(h.at('ranges/t1/me_reaction').limits.medianMs.limit,
+    assess.limitsFrom(assess.summarize([baseline]), assess.SPECS.reaction).limits.medianMs.limit);
 });
 
-test('a teammate saves to the subject record and receives no numerical comparison', async () => {
-  const { api, data } = setup();
-  api.set({ members: new Map([['a', { uid: 'a', teamIds: ['t1'] }]]),
-    ranges: new Map([['a_reaction', { n: 3, limits: { medianMs: { worse: 'higher', limit: 300 } } }]]) });
-  const result = await api.submitCheck('a', 'reaction', { medianMs: 400, spreadMs: 30, mistakes: 0 }, { rested: true });
-  assert.equal(result.status, 'monitor');
-  assert.equal(result.comparison, undefined);
-  const saved = data.get('users/a/trials/new1');
-  assert.equal(saved.teamId, 't1');
-  assert.equal(saved.subjectUid, 'a');
-  assert.equal(saved.testerUid, 'me');
-  assert.equal(saved.conditions.rested, true);
-  await assert.rejects(api.submitCheck('outsider', 'reaction', baseline.metrics), /shared team/);
+test('retry preserves visible loaded screens and late callbacks cannot change a different account', async () => {
+  const h = setup({ '.info': { connected: true }, profiles: { me: athlete, other: { role: 'athlete', name: 'Other' } }, teams: { t1: team() }, members: { t1: { me: member } } });
+  await h.login(); assert.equal(h.api.getSession().trialsReady, true);
+  await h.api.retrySync(); assert.equal(h.api.getSession().trialsReady, true);
+  await h.login('other'); h.emit('profiles/me');
+  assert.equal(h.api.getSession().profile.name, 'Other'); assert.equal(h.queues[0].jobs.size, 0);
 });
 
-test('deleting a merged result removes each known copy', async () => {
-  const { api, writes } = setup();
-  api.set({ trials: new Map([['b', { ...baseline, id: 'b', paths: ['teams/t1/trials/b', 'users/me/trials/b'] }]]) });
-  await api.deleteTrial('me', 'b');
-  assert.deepEqual(writes.map((w) => w.path).sort(), ['teams/t1/trials/b', 'users/me/trials/b']);
+test('the same account on phone and desktop receives both concurrent results and remote deletions', async () => {
+  const server = { data: { '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } }, clients: new Set() };
+  const phone = setup({}, { server, clientId: 'phone-' });
+  const desktop = setup({}, { server, clientId: 'desktop-' });
+  await Promise.all([phone.login(), desktop.login()]);
+  const [a, b] = await Promise.all([
+    phone.api.saveBaseline('reaction', baseline.metrics),
+    desktop.api.saveBaseline('reaction', { ...baseline.metrics, medianMs: 400 }),
+  ]);
+  await flush();
+  assert.notEqual(a.id, b.id);
+  for (const device of [phone, desktop]) {
+    assert.equal(device.api.getSession().trials.size, 2);
+    assert.equal(device.api.getSession().trials.get(a.id).metrics.medianMs, 250);
+    assert.equal(device.api.getSession().trials.get(b.id).metrics.medianMs, 400);
+    assert.equal(device.api.getSession().pendingWrites, 0);
+    assert.equal(device.api.getSession().ranges.get('me_reaction').n, 2);
+  }
+  const before = phone.writes.length + desktop.writes.length;
+  for (let i = 0; i < 10; i++) { phone.emit('ranges/t1'); desktop.emit('ranges/t1'); }
+  await flush(); assert.equal(phone.writes.length + desktop.writes.length, before);
+  await desktop.api.deleteTrial('me', a.id); await flush();
+  assert.equal(phone.api.getSession().trials.has(a.id), false);
+  assert.equal(desktop.api.getSession().trials.has(a.id), false);
+  assert.equal(phone.api.getSession().ranges.get('me_reaction').n, 1);
 });
 
-test('creating an existing profile never overwrites it', async () => {
-  const original = { role: 'coach', name: 'Original', teamId: 't1', teamIds: ['t1'] };
-  const { api, data, writes } = setup({ 'users/me': original }, 'coach');
-  await api.createProfile('athlete', 'Replacement');
-  assert.equal(data.get('users/me'), original);
-  assert.equal(writes.length, 0);
-  api.stopTeam();
+test('offline phone result reaches the signed-in desktop only after reconnect and acknowledgement', async () => {
+  const server = { data: { '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } }, clients: new Set() };
+  let reconnectWrite;
+  const phone = setup({}, { server, clientId: 'phone-', write: (path) => path.startsWith('trials/') ? new Promise((resolve) => { reconnectWrite = resolve; }) : undefined });
+  const desktop = setup({}, { server, clientId: 'desktop-' });
+  await Promise.all([phone.login(), desktop.login()]);
+  phone.setConnection(false);
+  const trial = await phone.api.saveBaseline('reaction', baseline.metrics);
+  assert.equal(phone.api.getSession().pendingWrites, 1);
+  assert.equal(phone.api.getSession().trials.has(trial.id), true);
+  assert.equal(desktop.api.getSession().trials.has(trial.id), false);
+  assert.equal(desktop.api.getSession().pendingWrites, 0);
+  phone.setConnection(true); reconnectWrite(); await flush();
+  assert.equal(phone.api.getSession().pendingWrites, 0);
+  assert.equal(desktop.api.getSession().trials.get(trial.id).metrics.medianMs, 250);
 });
 
-test('cached missing profile is never treated as server-confirmed absence', async () => {
-  const { api, emit, data } = setup({ 'users/me': { role: 'coach', name: 'Me', teamIds: ['t1'], teamId: 't1' } }, 'coach');
-  api.watchProfile({ uid: 'me' });
-  await new Promise((resolve) => setImmediate(resolve));
-  const profile = api.getSession().profile;
-  data.delete('users/me');
-  emit('users/me', null, { fromCache: true });
-  assert.equal(api.getSession().profile, profile);
-  api.stopTeam();
+test('team and history changes propagate to the other device without reloading or polling', async () => {
+  const server = { data: { '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team(), t2: team() }, members: { t1: { me: member } }, joinCodes: { ABCDEF: { teamId: 't2' } } }, clients: new Set() };
+  const phone = setup({}, { server, clientId: 'phone-' });
+  const desktop = setup({}, { server, clientId: 'desktop-' });
+  await Promise.all([phone.login(), desktop.login()]);
+  await phone.api.joinTeam('ABCDEF'); await flush();
+  assert.deepEqual(plain(desktop.api.getSession().profile.teamIds), ['t1', 't2']);
+  await phone.api.saveHistory({ concussions: 2, adhd: true });
+  assert.equal(desktop.api.getSession().history.get('me').concussions, 2);
+  await desktop.api.leaveTeam('t1'); await flush();
+  assert.deepEqual(plain(phone.api.getSession().profile.teamIds), ['t2']);
+  assert.equal(phone.api.getSession().teams.has('t1'), false);
+  assert.equal(phone.api.getSession().history.get('me').concussions, 2);
 });
 
-test('a coach creates another team while preserving the legacy first team and team limit', async () => {
-  const { api, data } = setup({ 'users/me': { role: 'coach', name: 'Me', teamId: 't1', teamIds: ['t1'] } }, 'coach');
-  await api.createTeam('Second team');
-  assert.equal(data.get('users/me').teamId, 't1');
-  const ids = data.get('users/me').teamIds;
-  assert.equal(ids.length, 2);
-  assert.equal(data.get('teams/' + ids[1]).name, 'Second team');
-  data.set('users/me', { ...data.get('users/me'), teamIds: Array.from({ length: 10 }, (_, i) => 't' + (i + 1)) });
-  await assert.rejects(api.createTeam('Too many'), /up to 10/);
-});
-
-test('migration keeps an existing copy and reconciles a later old-client join', async () => {
-  const copy = { ...baseline, teamId: null, at: '2026-10-02T12:00:00.000Z' };
-  const { api, data } = setup({
-    'users/me': { role: 'athlete', name: 'Me', teamIds: ['t1'], teamId: 't2', coachUids: ['c1'] },
-    'teams/t1': team('c1'), 'teams/t1/members/me': member,
-    'teams/t2': team('c2'), 'teams/t2/members/me': member,
-    'teams/t2/trials/b': baseline, 'users/me/trials/b': copy,
-  });
-  await api.migrateProfile('me');
-  assert.equal(data.get('users/me/trials/b'), copy);
-  assert.deepEqual(plain(data.get('users/me').teamIds), ['t1', 't2']);
-  assert.deepEqual(plain(data.get('users/me').coachUids), ['c1', 'c2']);
-  assert.equal(data.get('users/me').teamId, 't1');
-});
-
-test('merged flagged checks still produce one coach alert per run', () => {
-  const { api, emit } = setup({}, 'coach');
-  api.startTeams(['t1', 't2'], 'me', 'coach');
-  emit('teams/t1/members', [['a', member]]);
-  emit('teams/t2/members', [['a', member]]);
-  const check = { ...baseline, subjectUid: 'a', testerUid: 'teammate', kind: 'check', status: 'monitor' };
-  emit('teams/t1/trials', [['c', check]]);
-  emit('teams/t2/trials', []);
-  emit('users/a/trials', [['c', { ...check, teamId: 't1' }]]);
-  const alerts = readFileSync(new URL('../src/lib/alerts.js', import.meta.url), 'utf8')
-    .replace(/^import .*;\s*/gm, '').replace(/\bexport /g, '');
-  const context = vm.createContext({ getSession: api.getSession });
-  vm.runInContext(alerts + '\nglobalThis.result = coachAlerts();', context);
-  assert.equal(context.result.length, 1);
-  assert.equal(context.result[0].level, 'monitor');
-  assert.deepEqual(plain(context.result[0].tests), ['reaction']);
-  api.stopTeam();
-});
-
-
-test('history merges newest per athlete across coach teams and resets on team changes', () => {
-  const { api, emit } = setup({}, 'coach');
-  const older = { concussions: 1, adhd: false, vision: false, vestibular: false, updatedAt: '2026-10-01T12:00:00.000Z' };
-  const newer = { ...older, concussions: 2, updatedAt: '2026-10-02T12:00:00.000Z' };
-  api.startTeams(['t1', 't2'], 'me', 'coach');
-  emit('teams/t2/history', [['a', newer]]);
-  emit('teams/t1/history', [['a', older], ['b', older]]);
-  assert.equal(api.getSession().history.get('a'), newer);
-  assert.equal(api.getSession().history.get('b'), older);
-  emit('teams/t2/history', []);
-  assert.equal(api.getSession().history.get('a'), older);
-  api.startTeams(['t2'], 'me', 'coach');
-  assert.equal(api.getSession().history.size, 0);
-  emit('teams/t1/history', [['a', newer]]);
-  assert.equal(api.getSession().history.size, 0);
-  api.stopTeam();
-});
-
-test('athlete merges own history, saves only current memberships and copies history when joining', async () => {
-  const older = { concussions: 1, adhd: false, vision: false, vestibular: false, updatedAt: '2026-10-01T12:00:00.000Z' };
-  const newer = { ...older, concussions: 2, updatedAt: '2026-10-02T12:00:00.000Z' };
-  const { api, emit, data, writes } = setup({
-    'users/me': { role: 'athlete', name: 'Me', teamIds: ['t1', 't2', 'removed'], teamId: 't1', coachUids: ['coach'] },
-    'teams/t1/members/me': member, 'teams/t2/members/me': member,
-    'teams/t1/history/me': older, 'teams/t2/history/me': newer,
-    'teams/t3': team(), 'joinCodes/ABCDEF': { teamId: 't3' },
-  });
-  api.startTeams(['t1', 't2', 'removed'], 'me', 'athlete');
-  emit('teams/t2/history/me', null);
-  emit('teams/t1/history/me', null);
-  assert.equal(api.getSession().history.get('me'), newer);
-  await api.saveHistory({ ...newer, concussions: 30 });
-  const saved = data.get('teams/t1/history/me');
-  assert.equal(saved.concussions, 20);
-  assert.deepEqual(plain(data.get('teams/t2/history/me')), plain(saved));
-  assert.equal(writes.filter((w) => w.path.includes('/history/')).length, 2);
-  assert.ok(!data.has('teams/removed/history/me'));
-  emit('teams/t1/history/me', null);
-  await api.joinTeam('ABCDEF');
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.deepEqual(plain(data.get('teams/t3/history/me')), plain(saved));
-  api.startTeams([], 'me', 'athlete');
-  assert.equal(api.getSession().history.size, 0);
-  api.stopTeam();
+test('removing an avatar on desktop overrides the phone’s older locally cached choice', async () => {
+  const server = { data: { '.info': { connected: true }, profiles: { me: athlete }, teams: { t1: team() }, members: { t1: { me: member } } }, clients: new Set() };
+  const phone = setup({}, { server, clientId: 'phone-' });
+  const desktop = setup({}, { server, clientId: 'desktop-' });
+  await Promise.all([phone.login(), desktop.login()]);
+  await phone.api.saveAvatar({ kind: 'dot', dot: 'mint' });
+  assert.equal(desktop.api.getSession().avatars.get('me').kind, 'dot');
+  await desktop.api.saveAvatar(null);
+  assert.equal(phone.api.getSession().avatars.get('me')?.kind, 'none');
+  assert.equal(server.data.avatars.t1.me.kind, 'none');
 });

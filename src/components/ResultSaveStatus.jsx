@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { retryTrial, useSession } from '../lib/session.js';
 import { serviceErrorMessage } from '../lib/serviceErrors.js';
 
-// A result is available on another device only after Firestore acknowledges it.
+// A result is available on another device only after the server acknowledges it.
 // Keep a failed save tied to its original id so Retry cannot duplicate a trial.
-export default function ResultSaveStatus({ ids, label }) {
+export default function ResultSaveStatus({ ids, label, recordLabel = 'your account' }) {
   const session = useSession();
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState(null);
@@ -26,12 +26,12 @@ export default function ResultSaveStatus({ ids, label }) {
     }
   }
 
-  if (synced) return <p className="saved" role="status">{label} saved to your account. Available on your other signed-in devices.</p>;
+  if (synced) return <p className="saved" role="status">{label} saved to {recordLabel}. Synced across devices.</p>;
 
   return <div className={`callout ${failed.length ? 'danger' : 'warn'}`} role={failed.length ? 'alert' : 'status'}>
     <p>{failed.length
-      ? `${label} could not sync to your account.`
-      : `${label} waiting to sync. Other devices will show ${ids.length === 1 ? 'it' : 'them'} after syncing finishes.`}</p>
+      ? `${label} could not sync to ${recordLabel}.`
+      : `${label} waiting to sync to ${recordLabel}. Other devices will show ${ids.length === 1 ? 'it' : 'them'} after syncing finishes.`}</p>
     {error && <p className="small">{serviceErrorMessage(error)}</p>}
     {failed.length > 0 && <button className="small-btn" disabled={retrying} onClick={retry}>
       {retrying ? 'Retrying…' : 'Retry sync'}

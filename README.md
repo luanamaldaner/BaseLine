@@ -43,9 +43,9 @@ Coaches create and manage up to ten teams. Athletes can join up to ten teams wit
 
 Coach Home combines all athletes, flagged first, with team tags and a team filter. The Team tab has a separate roster and invite card for every team. The check picker groups athletes by team; someone on multiple teams may appear in multiple groups, but still has only one result record.
 
-A teammate running a check sees **only the call and action, never the athlete's numerical results in the UI**. The testing device processes the new measurements and judges them against published baseline cutoffs in `teams/{id}/ranges`. These documents contain cutoffs and baseline trial counts, not trial results. The new result is saved for the athlete and coach; the teammate cannot read it back.
+A teammate running a check sees **only the call and action, never the athlete's numerical results in the UI**. The testing device processes the new measurements and judges them against published baseline cutoffs in `ranges/{teamId}`. These documents contain cutoffs and baseline trial counts, not trial results. The new result is saved for the athlete and coach; the teammate cannot read it back.
 
-[Firestore rules](firestore.rules) enforce result access, allowed fields, and deletion rights. Athletes query only their own trials; coaches subscribe once per athlete across their teams. Teammates can submit checks but cannot read another athlete's record. Team members can read rosters and published ranges; the athlete publishes cutoffs to every team they belong to. This protects stored results, but the tester's device still handles the current measurement and computes its status.
+[Realtime Database rules](database.rules.json) enforce result access, allowed fields, and deletion rights. Athletes query only their own trials; coaches subscribe once per athlete across their teams. Teammates can submit checks but cannot read another athlete's record. Team members can read rosters and published ranges; the athlete publishes cutoffs to every team they belong to. This protects stored results, but the tester's device still handles the current measurement and computes its status.
 
 Coaches receive in-app alerts for checks run by others that return Monitor, Refer, or No baseline. Optional browser notifications work while the app is open, including in a background tab.
 
@@ -106,7 +106,7 @@ The device type (phone or laptop) is saved too. Flagged conditions show as tags 
 
 **Baseline sanity checks** ([lib/validity.js](src/lib/validity.js)): a baseline far worse than a healthy athlete usually scores (very slow reactions, eyes not keeping up with the dot, many balance errors) gets a "redo?" prompt before saving. A poor baseline, whether from a bad setup or deliberately doing badly ("sandbagging", a known problem with baseline tests), makes later checks look fine. The cutoffs are generous starting points to be tuned with volunteer data.
 
-**Pre-existing conditions** (prior concussions, ADHD, vision problems, vestibular or balance problems) shift what a normal result looks like and how long recovery takes. Athletes record them on the Team tab ([MedicalHistory](src/components/MedicalHistory.jsx)); the coach sees them beside that athlete's results. They are private to the athlete and each team?s coach (`teams/{id}/history/{uid}`), never on the roster teammates can read. Sessions merge history across teams by the newest `updatedAt` per athlete. Saving writes the same history to every current membership; joining another team copies the current history on a best-effort basis without blocking the join.
+**Pre-existing conditions** (prior concussions, ADHD, vision problems, vestibular or balance problems) shift what a normal result looks like and how long recovery takes. Athletes record them on the Team tab ([MedicalHistory](src/components/MedicalHistory.jsx)); the coach sees them beside that athlete's results. They are private to the athlete and each team?s coach (`history/{teamId}/{uid}`), never on the roster teammates can read. Sessions merge history across teams by the newest `updatedAt` per athlete. Saving writes the same history to every current membership; joining another team copies the current history in the same atomic membership update.
 
 **Practice effects:** the first attempt at an unfamiliar test is often the worst, and a bad early trial widens the baseline's spread and can hide a later deficit. Baselines are three trials and every trial counts. `PRACTICE_TRIALS` in [shared/assess.js](shared/assess.js) can drop leading trials from scoring if the team adds a warm-up trial; it is 0 for now. Reaction time has its own three unscored practice taps inside each run.
 
@@ -117,49 +117,36 @@ The device type (phone or laptop) is saved too. Flagged conditions show as tags 
 - **React + Vite** for the interface and build.
 - **MediaPipe FaceLandmarker**, a pretrained model running in the browser, for camera-based eye landmarks; the model and WebAssembly assets are served with the app.
 - **DeviceMotion API** for balance sensing; browser speech, audio, and vibration APIs for cues.
-- **Firebase Authentication** with email/password and password reset; **Firestore** for live results and persistent offline cache; **Firebase Hosting** for deployment.
-- **Installable PWA** with a manifest and production service worker that caches the app shell and fetched assets. Firestore separately caches data and queues writes for later sync.
+- **Firebase Authentication** with email/password and password reset; **Firebase Realtime Database** for shared live records and an **IndexedDB upload queue** for pending results; **Firebase Hosting** for deployment.
+- **Installable PWA** with a manifest and production service worker that caches the app shell and fetched assets. The upload queue durably stores each result before sending it and replays the same result ID after reconnection or a reload.
 - **No custom backend server or deployed scoring function**: measurement and scoring run on the client.
 
-Offline use depends on a previous online visit, cached assets/data, and an existing session. Camera assets are cached when fetched; a first visit or account setup needs connectivity. Results are stored in Firestore, not solely in browser storage.
+An already-loaded session can queue results while offline. Opening the app from scratch, loading shared records, joining teams, and changing account settings need connectivity. Pending results survive a reload in IndexedDB and resume uploading when the app reconnects. A result is marked saved only after the database acknowledges it. Sign in to the same account on each device to receive the same live records.
 
 ## Data model
 
-Fields and permissions are defined in the header and validators of [firestore.rules](firestore.rules). Email/password credentials are managed by Firebase Auth.
+Access rules are generated from [scripts/generate-database-rules.mjs](scripts/generate-database-rules.mjs) into [database.rules.json](database.rules.json). Firebase Authentication still manages the same accounts and passwords.
 
 ```text
-users/{uid}
-  role: coach | athlete (immutable), name
-  teamIds: list<string>           # up to 10; source of truth on new clients
-  teamId: string | null          # retained first team for older clients
-  coachUids: list<string>        # athletes only, up to 20; record readers
-  consentedAt?: ISO timestamp
-  trials/{trialId}
-    subjectUid, testerUid, test, kind: baseline | check, at, metrics
-    teamId: string | null        # shared team for checks; null for baselines
-    status: normal | monitor | refer | no-baseline   # checks only
-    conditions?: { rested: bool, place: quiet | sideline,
-                   light: indoor | shade | sun, device: phone | laptop,
-                   heat: bool, pain: bool }
-joinCodes/{code}
-  teamId                         # signed-in single-code lookup; no listing
-teams/{id}
+profiles/{uid}                     # owner-only profile
+  role, name, consentedAt?, teamIds: { teamId: true }
+teams/{teamId}                     # team metadata, no private records
   name, coachUid, coachName, code, createdAt
-  members/{uid}
-    name, code, joinedAt
-  trials/{trialId}               # legacy; new clients read and merge by id
-    subjectUid, testerUid, test, kind: baseline | check, at, metrics
-    status: normal | monitor | refer | no-baseline   # checks only
-    conditions?: { rested: bool, place: quiet | sideline,
-                   light: indoor | shade | sun, device: phone | laptop,
-                   heat: bool, pain: bool }
-  history/{uid}                  # athlete + coach only; not on the roster
-    concussions: 0-20, adhd, vision, vestibular: bool, updatedAt
-  avatars/{uid}                  # profile picture; team + coach can see, owner sets
-    kind: photo | dot, photo?: JPEG data URL (192x192, <=120 KB), dot?: preset, updatedAt
-  ranges/{subjectUid}_{test}
-    subjectUid, test, n
-    limits: { metric: { worse: higher | lower, limit: number } }
+joinCodes/{code}                   # single-code lookup, no enumeration
+  teamId
+members/{teamId}/{uid}
+  name, code, joinedAt
+recordReaders/{athleteUid}/{coachUid}/{teamId}: true
+trials/{subjectUid}/{trialId}       # athlete + their current coaches only
+  subjectUid, testerUid, test, kind: baseline | check, at, metrics
+  teamId?, status?                 # required for checks
+  conditions?: { rested, place, light, device, heat, pain }
+ranges/{teamId}/{subjectUid}_{test} # published cutoffs for teammates
+  subjectUid, test, n, limits: { metric: { worse, limit } }
+history/{teamId}/{uid}             # athlete + team coach only
+  concussions, adhd, vision, vestibular, updatedAt
+avatars/{teamId}/{uid}             # roster-visible picture, owner writes
+  kind: photo | dot | none, photo?, dot?, updatedAt
 ```
 
 `test` is `balance`, `reaction`, `eye`, or `eyePhone`. Timestamps are ISO strings. Trial metric values are bounded numbers or `null` when unavailable:
@@ -170,9 +157,11 @@ teams/{id}
 | `reaction` | `medianMs`, `spreadMs`, `mistakes` |
 | `eye`, `eyePhone` | `onTarget`, `gain`, `saccadeRate`, `lagMs`, `trackingError` |
 
-Profiles without `teamIds` fall back to their legacy `teamId`. After a server-confirmed login, an athlete's legacy trials are copied into their own record with the original IDs, skipping existing documents. Checks gain the old team ID and baselines gain `teamId: null`; metrics, tester, timestamps, status, and conditions stay intact. Only after copying succeeds are `teamIds` and `coachUids` added. Coaches only need the profile update. This runs in the background, retries failures, and never deletes legacy data. Reads continue merging both locations, so older clients' new results remain visible within that team's access. A verified team joined by an older client after migration is reconciled on the next new-client session.
+Joining, leaving, and removing a member update membership, profile links, and coach read grants atomically. A coach loses access after the last shared team is removed; the athlete keeps their results. Scoped live listeners update all connected devices without polling. Cutoffs are only rewritten when their values change.
 
-Owners alone can change profiles. Removing an athlete deletes their membership immediately; their next connected session cleans up the team and coach lists. Leaving also copies any remaining own legacy trials before dropping the team from the profile. Until cleanup, a removed coach can still read the new record if their UID remains in `coachUids`. A coach shared by another remaining team keeps access. Legacy result access remains unchanged, including the original coach's access after departure.
+The Firestore migration preserves stable result IDs, merges duplicate legacy records, rebuilds access grants from actual memberships, and verifies a checksum after importing. Source records and a local backup are retained. Refreshed clients disable Firestore networking and recover pending results from that browser's old cache into the durable upload queue. Refresh every phone and computer after the cutover; an old open page still runs the old Firestore client. Keep browser data until its results are confirmed saved.
+
+The project uses the **Spark no-cost plan**. Realtime Database avoids Firestore's daily document-write quota, but still has free-plan connection, storage, and download limits. Exceeding those limits can interrupt service; it does not turn Spark into paid usage. See [Firebase pricing](https://firebase.google.com/pricing). Do not upgrade to Blaze if the requirement is no paid usage.
 
 ## Running locally
 
@@ -203,40 +192,29 @@ node --test scripts/session.test.mjs
 ```
 
 ```bash
-npm test                       # eye-pursuit metrics on synthetic recordings with known lag and gain
+npm test                       # scoring, sessions, upload queue, cache recovery, migration
 node scripts/falsepositives.mjs  # how often the scoring rule flags a healthy athlete
 ```
 
 ### Deployment
 
-The rules are part of the app: a change to `firestore.rules` (allowed condition keys, the `history` collection) must be deployed with `firebase deploy --only firestore:rules` before, or together with, the hosting build that uses it. Until then the app's fallback saves results without the conditions tag and medical history cannot be saved.
+Set `VITE_FIREBASE_DATABASE_URL` in `.env.local` along with the existing Firebase web config. The database is `https://dte-hackathon-default-rtdb.firebaseio.com`.
 
-With Firebase CLI access to the project:
+Install Firebase CLI and Java 21+ to run real security-rule and two-client listener tests locally:
 
 ```bash
+node scripts/generate-database-rules.mjs
+npm run test:rules
+npm test
 npm run build
-firebase deploy --only hosting
+firebase deploy --only database,hosting --project dte-hackathon
 ```
 
-When Firestore rules change, publish them separately:
+[firebase.json](firebase.json) serves `dist/` on the `baselinetest` Hosting site and deploys `database.rules.json`. Firestore rules are retained for the legacy source; new clients do not send application writes to Firestore.
 
-```bash
-firebase deploy --only firestore:rules
-```
+The one-time administrative migration uses an existing authorized Firebase CLI login; it creates no service-account keys. Set `FIREBASE_TOOLS_ROOT` to the installed `firebase-tools` package directory. Run `node scripts/migrate-realtime.mjs` to export a backup under ignored `.firebase/migration/`, then `node scripts/migrate-realtime.mjs --apply <backup-path>` to import into an empty database. It refuses to overwrite an existing different dataset and verifies the result checksum. Backups contain private data and must not be committed.
 
-[firebase.json](firebase.json) serves `dist/` on the `baselinetest` Hosting site, rewrites routes to `index.html`, and points to `firestore.rules`.
-
-### Multiple-team rollout
-
-Publish compatible rules before publishing the new client. Validate the rules with `firebase deploy --only firestore:rules --dry-run --non-interactive` first. Older clients interact with the new rules at these paths:
-
-- `users/{uid}`: reads, initial profile creation, consent, and legacy `teamId` updates remain permitted. New list fields are optional for legacy profiles; role and recorded consent remain immutable.
-- `teams/{teamId}` and `joinCodes/{code}`: the old atomic create-team batch remains valid through the legacy profile-link branch. Code lookups remain signed-in single-document reads; codes cannot be listed or changed. Signed-in single-team reads also support invite previews before joining; team listing stays restricted.
-- `teams/{teamId}/members/{uid}`: old code-based join batches remain valid, including clients that only update `teamId`. Roster reads, self-leave, and coach removal remain supported. An athlete can also read their own missing membership to detect removal.
-- `teams/{teamId}/trials/{trialId}`: the legacy read, create, delete, and no-update rules and validators are unchanged, including conditions and `eyePhone`. New clients merge those results by ID with the athlete record and track both copies for deletion.
-- `teams/{teamId}/ranges/{rangeId}`: shapes and permissions are unchanged, so older clients can publish and judge checks as before.
-
-Older clients do not read `users/{uid}/trials`; they will not display results written only by the new client. Refresh clients to see the complete shared record. Before an athlete's first migration, coaches can still see that athlete's legacy results on their own teams. Late legacy writes are readable through that team's legacy merge; coaches of other teams cannot read those legacy documents until copied into the athlete record. These are limits of retaining legacy permissions and making new writes only to the new location.
+For a final cutover check, export again and run `node scripts/migrate-realtime.mjs --reconcile <previous-backup> <fresh-backup> --dry-run`. Without `--dry-run`, only newly exported result IDs are conditionally created; existing results and membership permissions are never overwritten. Inspect reported conflicts or account/team changes. Use the fresh successfully reconciled backup for subsequent comparisons. A result recovered and then deleted on a device before reconciliation cannot be distinguished from a never-imported late result without deletion history; refresh old clients promptly.
 
 ## Code layout
 
@@ -258,8 +236,10 @@ src/
     reaction/              Tap timing, reaction metrics, test UI
     eye/                   Camera landmarks, calibration, pursuit scoring, plots
   lib/
-    firebase.js            Firebase initialization and offline persistence
+    firebase.js            Auth, RTDB initialization, legacy cache access
     session.js             Live state, team/trial writes, published cutoffs
+    outbox.js              Durable per-account result uploads and retries
+    legacyRecovery.js      Recovery of pending results from old browser caches
     baseline.js, status.js  Baseline comparisons, CSV export, overall calls
     alerts.js, invite.js    Coach alert grouping and join-link handling
     cues.js, focus.js       Speech/audio/vibration and test focus behavior
@@ -272,5 +252,5 @@ shared/
 
 - **Clinical validation:** measure repeatability and compare screening calls with clinician assessments before claiming diagnostic accuracy or effectiveness.
 - **Trusted scoring:** move teammate-check scoring to a Cloud Function so a tampered phone cannot submit a fabricated status. Current rules validate access and data shape, not the calculation.
-- **Rollout follow-up:** refresh older clients, verify athlete migrations, and monitor legacy writes before considering retirement of the legacy result location. Immediate coach-access revocation would require changing the owner-only profile model or adding a trusted service.
+- **Rollout follow-up:** refresh all older clients and confirm their locally queued results have uploaded. The Firestore source remains available for administrative recovery; new clients use only Realtime Database for shared records.
 - **Measurement quality:** device latency, lighting, head motion, sensor support, fatigue, and test setup can affect results. Keep baseline and check conditions consistent. Skipped tests or missing metrics reduce what the overall call covers.

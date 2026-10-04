@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { getDatabase } from 'firebase/database';
 import {
   initializeAuth,
   indexedDBLocalPersistence,
@@ -8,10 +9,11 @@ import {
   initializeFirestore,
   persistentLocalCache,
   persistentMultipleTabManager,
+  disableNetwork,
 } from 'firebase/firestore';
 
 // Web app config comes from .env.local (not committed; see .env.example).
-// Access to data is controlled by Firebase Auth + firestore.rules.
+// Access to active data is controlled by Firebase Auth + database.rules.json.
 const env = import.meta.env;
 const firebaseConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY,
@@ -20,6 +22,7 @@ const firebaseConfig = {
   storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: env.VITE_FIREBASE_APP_ID,
+  databaseURL: env.VITE_FIREBASE_DATABASE_URL,
 };
 if (!firebaseConfig.apiKey) {
   throw new Error('Missing Firebase config: copy .env.example to .env.local and fill it in.');
@@ -33,17 +36,26 @@ export const auth = initializeAuth(app, {
   persistence: [indexedDBLocalPersistence, browserLocalPersistence],
 });
 
-// Offline cache: results keep saving on bad Wi-Fi and sync when it's back.
-//
-// Share the persistent outbox between tabs. An exclusive single-tab cache
-// makes a second tab fall back to memory, so its unsynced results can be lost
-// on reload. The SDK coordinates the network owner across tabs.
-//
-// Forced long polling: on some networks (campus and venue Wi-Fi, carrier
-// proxies) Firestore's streaming transport opens but writes are never
-// acknowledged, with the same symptom. The SDK's auto-detect only catches a
-// failed handshake, not a stream that hangs.
+// Realtime Database is the active store. Authentication stays on the same
+// project, so existing accounts and passwords continue to work.
+export const realtimeDb = getDatabase(app);
+
+// Legacy cache access only. Keep the original cache settings so upgrades can
+// recover results queued by old versions on this exact browser. Disable the
+// network immediately, before profile/roster loading or recovery can start;
+// otherwise the old queue might flush before the cache bridge can inspect it.
 export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
   experimentalForceLongPolling: true,
 });
+
+let legacyNetworkDisabled;
+export function stopLegacyFirestoreNetwork() {
+  if (!legacyNetworkDisabled) {
+    legacyNetworkDisabled = disableNetwork(db).catch((error) => { legacyNetworkDisabled = null; throw error; });
+  }
+  return legacyNetworkDisabled;
+}
+// Recovery awaits this same operation and surfaces failures. The startup
+// catch avoids an unhandled rejection before an account has finished loading.
+stopLegacyFirestoreNetwork().catch(() => {});

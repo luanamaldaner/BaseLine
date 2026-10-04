@@ -139,7 +139,7 @@ export default function Tour({ role, setTab, onClose }) {
   const placed = ready && (centered || cardPos);
 
   return (
-    <div className="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+    <div className="tour" role="dialog" aria-modal="true" aria-labelledby="tour-title" aria-describedby="tour-body">
       {spot ? (
         <div key={i} className="tour-spot" style={{ top: spot.top, left: spot.left, width: spot.width, height: spot.height }} />
       ) : (
@@ -147,7 +147,7 @@ export default function Tour({ role, setTab, onClose }) {
       )}
       <div
         key={`card-${i}`}
-        className={`tour-card ${centered ? 'centered' : ''}`}
+        className={`tour-card ${centered ? 'centered' : ''}${i === 0 ? ' tour-welcome' : ''}`}
         style={{ ...(cardPos && !centered ? cardPos : {}), visibility: placed ? 'visible' : 'hidden' }}
         ref={cardRef}
         tabIndex={-1}
@@ -157,11 +157,11 @@ export default function Tour({ role, setTab, onClose }) {
             <Dot arms={i === 0 || last ? 'wave' : 'rest'} />
           </svg>
           <div>
-            <p className="eyebrow">Step {i + 1} of {steps.length}</p>
+            <p className="eyebrow">{i === 0 ? 'Welcome to Baseline' : `Step ${i + 1} of ${steps.length}`}</p>
             <h2 id="tour-title">{step.title}</h2>
           </div>
         </div>
-        <p className="tour-body">{step.body}</p>
+        <p className="tour-body" id="tour-body">{step.body}</p>
         <div className="tour-progress" aria-hidden="true">
           {steps.map((_, n) => <i key={n} className={n === i ? 'on' : n < i ? 'done' : ''} />)}
         </div>

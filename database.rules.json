@@ -1,0 +1,403 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid && !data.exists() && newData.exists() && !newData.child('teamIds').exists()",
+        ".validate": "newData.hasChildren(['name', 'role']) && (!data.child('consentedAt').exists() || newData.child('consentedAt').val() == data.child('consentedAt').val())",
+        "role": {
+          ".validate": "(newData.val() == 'coach' || newData.val() == 'athlete') && (!data.exists() || newData.val() == data.val())"
+        },
+        "name": {
+          ".write": "auth != null && auth.uid == $uid && newData.exists()",
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+        },
+        "consentedAt": {
+          ".write": "auth != null && auth.uid == $uid && !data.exists() && newData.exists()",
+          ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+        },
+        "teamIds": {
+          "$teamId": {
+            ".write": "auth != null && ((newData.exists() && auth.uid == $uid && (newData.parent().parent().parent().parent().child('teams').child($teamId).child('coachUid').val() == $uid || (newData.parent().parent().parent().parent().child('members').child($teamId).child($uid).exists() && newData.parent().parent().parent().parent().child('recordReaders').child($uid).child(newData.parent().parent().parent().parent().child('teams').child($teamId).child('coachUid').val()).child($teamId).val() == true))) || (!newData.exists() && (auth.uid == $uid || root.child('teams').child($teamId).child('coachUid').val() == auth.uid) && !newData.parent().parent().parent().parent().child('members').child($teamId).child($uid).exists() && !newData.parent().parent().parent().parent().child('recordReaders').child($uid).child(newData.parent().parent().parent().parent().child('teams').child($teamId).child('coachUid').val()).child($teamId).exists() && !newData.parent().parent().parent().parent().child('history').child($teamId).child($uid).exists()))",
+            ".validate": "newData.val() == true && $teamId.length <= 128"
+          }
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "teams": {
+      "$teamId": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.exists() && root.child('profiles').child(auth.uid).child('role').val() == 'coach' && newData.child('coachUid').val() == auth.uid && newData.parent().parent().child('profiles').child(auth.uid).child('teamIds').child($teamId).val() == true && newData.parent().parent().child('joinCodes').child(newData.child('code').val()).child('teamId').val() == $teamId",
+        ".validate": "newData.hasChildren([\"name\",\"coachUid\",\"coachName\",\"code\",\"createdAt\"])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+        },
+        "coachUid": {
+          ".validate": "newData.isString() && newData.val() == auth.uid"
+        },
+        "coachName": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+        },
+        "code": {
+          ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9]{6}$/)"
+        },
+        "createdAt": {
+          ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "joinCodes": {
+      "$code": {
+        ".read": "auth != null",
+        ".write": "auth != null && !data.exists() && newData.exists() && $code.matches(/^[A-Z0-9]{6}$/) && newData.parent().parent().child('teams').child(newData.child('teamId').val()).child('coachUid').val() == auth.uid && newData.parent().parent().child('teams').child(newData.child('teamId').val()).child('code').val() == $code",
+        ".validate": "newData.hasChildren([\"teamId\"])",
+        "teamId": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "members": {
+      "$teamId": {
+        ".read": "auth != null && (root.child('teams').child($teamId).child('coachUid').val() == auth.uid || root.child('members').child($teamId).child(auth.uid).exists())",
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && ((newData.exists() && !data.exists() && auth.uid == $uid && root.child('profiles').child($uid).child('role').val() == 'athlete' && newData.parent().parent().parent().child('profiles').child($uid).child('teamIds').child($teamId).val() == true && newData.parent().parent().parent().child('recordReaders').child($uid).child(newData.parent().parent().parent().child('teams').child($teamId).child('coachUid').val()).child($teamId).val() == true) || (!newData.exists() && (auth.uid == $uid || root.child('teams').child($teamId).child('coachUid').val() == auth.uid) && !newData.parent().parent().parent().child('profiles').child($uid).child('teamIds').child($teamId).exists() && !newData.parent().parent().parent().child('recordReaders').child($uid).child(newData.parent().parent().parent().child('teams').child($teamId).child('coachUid').val()).child($teamId).exists() && !newData.parent().parent().parent().child('history').child($teamId).child($uid).exists()))",
+          ".validate": "newData.hasChildren([\"name\",\"code\",\"joinedAt\"])",
+          "name": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 60"
+          },
+          "code": {
+            ".validate": "newData.isString() && newData.val().matches(/^[A-Z0-9]{6}$/) && newData.val() == root.child('teams').child($teamId).child('code').val()"
+          },
+          "joinedAt": {
+            ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "recordReaders": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        "$coachUid": {
+          ".read": "auth != null && auth.uid == $coachUid",
+          "$teamId": {
+            ".write": "auth != null && ((newData.exists() && auth.uid == $uid && newData.parent().parent().parent().parent().child('teams').child($teamId).child('coachUid').val() == $coachUid && newData.parent().parent().parent().parent().child('members').child($teamId).child($uid).exists() && newData.parent().parent().parent().parent().child('profiles').child($uid).child('teamIds').child($teamId).val() == true) || (!newData.exists() && (auth.uid == $uid || auth.uid == $coachUid) && root.child('teams').child($teamId).child('coachUid').val() == $coachUid && !newData.parent().parent().parent().parent().child('members').child($teamId).child($uid).exists() && !newData.parent().parent().parent().parent().child('profiles').child($uid).child('teamIds').child($teamId).exists() && !newData.parent().parent().parent().parent().child('history').child($teamId).child($uid).exists()))",
+            ".validate": "newData.val() == true"
+          }
+        }
+      }
+    },
+    "trials": {
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || root.child('recordReaders').child($uid).child(auth.uid).hasChildren())",
+        ".indexOn": [
+          "at"
+        ],
+        "$trialId": {
+          ".validate": "newData.hasChildren([\"subjectUid\",\"testerUid\",\"test\",\"kind\",\"at\"]) && ((newData.child('kind').val() == 'baseline' && !newData.child('teamId').exists() && !newData.child('status').exists()) || (newData.child('kind').val() == 'check' && newData.hasChildren(['teamId', 'status'])))",
+          "subjectUid": {
+            ".validate": "newData.val() == $uid"
+          },
+          "testerUid": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128"
+          },
+          "test": {
+            ".validate": "(newData.val() == 'balance' || newData.val() == 'reaction' || newData.val() == 'eye' || newData.val() == 'eyePhone')"
+          },
+          "kind": {
+            ".validate": "(newData.val() == 'baseline' || newData.val() == 'check')"
+          },
+          "at": {
+            ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+          },
+          "teamId": {
+            ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 128 && newData.parent().child('kind').val() == 'check'"
+          },
+          "status": {
+            ".validate": "(newData.val() == 'normal' || newData.val() == 'monitor' || newData.val() == 'refer' || newData.val() == 'no-baseline') && newData.parent().child('kind').val() == 'check'"
+          },
+          "metrics": {
+            ".validate": "newData.hasChildren()",
+            "sway": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'balance')"
+            },
+            "singleSway": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'balance')"
+            },
+            "errors": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'balance')"
+            },
+            "medianMs": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'reaction')"
+            },
+            "spreadMs": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'reaction')"
+            },
+            "mistakes": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'reaction')"
+            },
+            "onTarget": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')"
+            },
+            "gain": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')"
+            },
+            "saccadeRate": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')"
+            },
+            "lagMs": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')"
+            },
+            "trackingError": {
+              ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000 && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "conditions": {
+            ".validate": "newData.hasChildren()",
+            "rested": {
+              ".validate": "newData.isBoolean()"
+            },
+            "heat": {
+              ".validate": "newData.isBoolean()"
+            },
+            "pain": {
+              ".validate": "newData.isBoolean()"
+            },
+            "place": {
+              ".validate": "(newData.val() == 'quiet' || newData.val() == 'sideline')"
+            },
+            "light": {
+              ".validate": "(newData.val() == 'indoor' || newData.val() == 'shade' || newData.val() == 'sun')"
+            },
+            "device": {
+              ".validate": "(newData.val() == 'phone' || newData.val() == 'laptop')"
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          },
+          ".write": "auth != null && ((!newData.exists() && (auth.uid == $uid || root.child('recordReaders').child($uid).child(auth.uid).hasChildren())) || (newData.exists() && ((!data.exists() && newData.child('testerUid').val() == auth.uid && ((auth.uid == $uid && newData.child('kind').val() == 'baseline' && root.child('profiles').child($uid).child('role').val() == 'athlete') || (newData.child('kind').val() == 'check' && newData.child('teamId').isString() && root.child('members').child(newData.child('teamId').val()).child($uid).exists() && (root.child('members').child(newData.child('teamId').val()).child(auth.uid).exists() || root.child('teams').child(newData.child('teamId').val()).child('coachUid').val() == auth.uid)))) || (data.exists() && data.child('testerUid').val() == auth.uid && (newData.child('subjectUid').val() == data.child('subjectUid').val() && newData.child('testerUid').val() == data.child('testerUid').val() && newData.child('test').val() == data.child('test').val() && newData.child('kind').val() == data.child('kind').val() && newData.child('at').val() == data.child('at').val() && newData.child('teamId').val() == data.child('teamId').val() && newData.child('status').val() == data.child('status').val() && newData.child('metrics/sway').val() == data.child('metrics/sway').val() && newData.child('metrics/singleSway').val() == data.child('metrics/singleSway').val() && newData.child('metrics/errors').val() == data.child('metrics/errors').val() && newData.child('metrics/medianMs').val() == data.child('metrics/medianMs').val() && newData.child('metrics/spreadMs').val() == data.child('metrics/spreadMs').val() && newData.child('metrics/mistakes').val() == data.child('metrics/mistakes').val() && newData.child('metrics/onTarget').val() == data.child('metrics/onTarget').val() && newData.child('metrics/gain').val() == data.child('metrics/gain').val() && newData.child('metrics/saccadeRate').val() == data.child('metrics/saccadeRate').val() && newData.child('metrics/lagMs').val() == data.child('metrics/lagMs').val() && newData.child('metrics/trackingError').val() == data.child('metrics/trackingError').val() && newData.child('conditions/rested').val() == data.child('conditions/rested').val() && newData.child('conditions/heat').val() == data.child('conditions/heat').val() && newData.child('conditions/pain').val() == data.child('conditions/pain').val() && newData.child('conditions/place').val() == data.child('conditions/place').val() && newData.child('conditions/light').val() == data.child('conditions/light').val() && newData.child('conditions/device').val() == data.child('conditions/device').val())))))"
+        }
+      }
+    },
+    "avatars": {
+      "$teamId": {
+        ".read": "auth != null && (root.child('teams').child($teamId).child('coachUid').val() == auth.uid || root.child('members').child($teamId).child(auth.uid).exists())",
+        "$uid": {
+          ".write": "auth != null && ((newData.exists() && auth.uid == $uid && (root.child('teams').child($teamId).child('coachUid').val() == auth.uid || root.child('members').child($teamId).child(auth.uid).exists())) || (!newData.exists() && (auth.uid == $uid || root.child('teams').child($teamId).child('coachUid').val() == auth.uid)))",
+          ".validate": "newData.hasChildren(['kind', 'updatedAt']) && ((newData.child('kind').val() == 'photo' && newData.child('photo').exists()) || (newData.child('kind').val() == 'dot' && newData.child('dot').exists()) || (newData.child('kind').val() == 'none' && !newData.child('photo').exists() && !newData.child('dot').exists()))",
+          "kind": {
+            ".validate": "(newData.val() == 'photo' || newData.val() == 'dot' || newData.val() == 'none')"
+          },
+          "updatedAt": {
+            ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+          },
+          "photo": {
+            ".validate": "newData.isString() && newData.val().length <= 120000 && newData.val().matches(/^data:image\\/jpeg;base64,[A-Za-z0-9+\\/=]+$/) && newData.parent().child('kind').val() == 'photo'"
+          },
+          "dot": {
+            ".validate": "(newData.val() == 'sunny' || newData.val() == 'mint' || newData.val() == 'sky' || newData.val() == 'berry' || newData.val() == 'grape' || newData.val() == 'tangerine') && newData.parent().child('kind').val() == 'dot'"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "history": {
+      "$teamId": {
+        ".read": "auth != null && root.child('teams').child($teamId).child('coachUid').val() == auth.uid",
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && ((newData.exists() && auth.uid == $uid && newData.parent().parent().parent().child('members').child($teamId).child($uid).exists()) || (!newData.exists() && (auth.uid == $uid || root.child('teams').child($teamId).child('coachUid').val() == auth.uid)))",
+          ".validate": "newData.hasChildren([\"concussions\",\"adhd\",\"vision\",\"vestibular\",\"updatedAt\"])",
+          "concussions": {
+            ".validate": "newData.isNumber() && newData.val() % 1 == 0 && newData.val() >= 0 && newData.val() <= 20"
+          },
+          "adhd": {
+            ".validate": "newData.isBoolean()"
+          },
+          "vision": {
+            ".validate": "newData.isBoolean()"
+          },
+          "vestibular": {
+            ".validate": "newData.isBoolean()"
+          },
+          "updatedAt": {
+            ".validate": "newData.isString() && newData.val().length <= 40 && newData.val().matches(/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?Z$/)"
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    },
+    "ranges": {
+      "$teamId": {
+        ".read": "auth != null && (root.child('teams').child($teamId).child('coachUid').val() == auth.uid || root.child('members').child($teamId).child(auth.uid).exists())",
+        "$rangeId": {
+          ".write": "auth != null && ((newData.exists() && root.child('members').child($teamId).child(newData.child('subjectUid').val()).exists() && (newData.child('subjectUid').val() == auth.uid || root.child('teams').child($teamId).child('coachUid').val() == auth.uid)) || (!newData.exists() && (root.child('teams').child($teamId).child('coachUid').val() == auth.uid || data.child('subjectUid').val() == auth.uid || $rangeId == auth.uid + '_balance' || $rangeId == auth.uid + '_reaction' || $rangeId == auth.uid + '_eye' || $rangeId == auth.uid + '_eyePhone')))",
+          ".validate": "newData.hasChildren(['subjectUid', 'test', 'n']) && $rangeId == newData.child('subjectUid').val() + '_' + newData.child('test').val()",
+          "subjectUid": {
+            ".validate": "newData.isString() && (!data.exists() || newData.val() == data.val())"
+          },
+          "test": {
+            ".validate": "(newData.val() == 'balance' || newData.val() == 'reaction' || newData.val() == 'eye' || newData.val() == 'eyePhone')"
+          },
+          "n": {
+            ".validate": "newData.isNumber() && newData.val() % 1 == 0 && newData.val() >= 1 && newData.val() <= 1000"
+          },
+          "limits": {
+            ".validate": "newData.hasChildren()",
+            "sway": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'balance')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "singleSway": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'balance')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "errors": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'balance')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "medianMs": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'reaction')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "spreadMs": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'reaction')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "mistakes": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'reaction')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "onTarget": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "gain": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "saccadeRate": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "lagMs": {
+              ".validate": "newData.hasChildren(['worse', 'limit']) && (newData.parent().parent().child('test').val() == 'eye' || newData.parent().parent().child('test').val() == 'eyePhone')",
+              "worse": {
+                ".validate": "(newData.val() == 'higher' || newData.val() == 'lower')"
+              },
+              "limit": {
+                ".validate": "newData.isNumber() && newData.val() >= -1000000 && newData.val() <= 1000000"
+              },
+              "$other": {
+                ".validate": false
+              }
+            },
+            "$other": {
+              ".validate": false
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
+        }
+      }
+    }
+  }
+}

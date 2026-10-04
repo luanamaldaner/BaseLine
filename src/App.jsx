@@ -69,7 +69,7 @@ function SyncStatus({ s }) {
       {s.syncError && <p>{serviceErrorMessage(s.syncError)}</p>}
       {n > 0 && <p>{results} waiting for Firebase confirmation. Keep this device’s browser data so queued results can upload when service resumes.</p>}
       {failed > 0 && <>
-        <p>{failed} result{failed === 1 ? '' : 's'} could not upload. Keep this page open until you retry successfully.</p>
+        <p>{failed} result{failed === 1 ? '' : 's'} could not upload. They are stored on this device. Keep this browser’s data and retry when connected.</p>
         <RetryFailedResults ids={failedIds} />
       </>}
       {down && !s.syncError && <p>Cloud sync is unavailable. Check your connection, then retry.</p>}
@@ -205,7 +205,7 @@ function Frame({ s, tabs, tab, setTab, focus = false, unread = 0, children }) {
             {pill && <span className="tab-pill" aria-hidden="true" style={pill} />}
             {tabs.map(([id, label, shortLabel, Icon]) => (
               <button key={id} ref={(el) => { tabRefs.current[id] = el; }} className={id === tab ? 'active' : ''} aria-current={id === tab ? 'page' : undefined} onClick={() => setTab(id)}>
-                <span className="tab-desktop">{label}</span>
+                <span className="tab-desktop"><Icon size={18} /><span>{label}</span></span>
                 <span className="tab-phone">
                   <span className="tab-icon"><Icon />{id === 'roster' && unread > 0 && (
                     <span className="tab-badge" aria-label={unread + ' unread alerts'}>{unread}</span>
